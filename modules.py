@@ -1,0 +1,321 @@
+#!\usr\bin\env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Mar 28 23:49:14 2018
+
+@author: Stamatis Lefkimmiatis
+@email : s.lefkimmatis@skoltech.ru
+"""
+
+import torch as th
+from torch import nn
+from . import cascades
+from . import init
+from .utils import formatInput2Tuple, getPad2RetainShape
+#from collections import OrderedDict
+
+#from functools import reduce
+#prod = lambda f: reduce(lambda x,y : x*y,f)
+           
+class ResidualRBFLayer(nn.Module):
+    
+    def __init__(self, kernel_size,\
+                 input_channels,\
+                 output_features,\
+                 rbf_mixtures,\
+                 rbf_precision,\
+                 #rbf_start,\
+                 #rbf_end,\
+                 #rbf_step=0.1,\
+                 pad = 'same',\
+                 convWeightSharing = True,\
+                 alpha = True,
+                 lb = -100,\
+                 ub = 100,\
+                 padType = 'symmetric',\
+                 scale_f = True,\
+                 scale_t = True,\
+                 normalizedWeights = True,\
+                 zeroMeanWeights = True):
+        
+        super(ResidualRBFLayer, self).__init__()
+        
+        kernel_size = formatInput2Tuple(kernel_size,int,2)       
+        
+        if isinstance(pad,str) and pad == 'same':
+            pad = getPad2RetainShape(kernel_size)
+#            # center of the kernel
+#            Kc = th.Tensor(kernel_size).add(1).div(2).floor()
+#            pad = (int(Kc[0])-1, kernel_size[0]-int(Kc[0]),\
+#                   int(Kc[1])-1,kernel_size[1]-int(Kc[1]))
+            
+        self.pad = formatInput2Tuple(pad,int,4)
+        self.padType = padType
+        self.normalizedWeights = normalizedWeights
+        self.zeroMeanWeights = zeroMeanWeights
+        self.lb = lb
+        self.ub = ub
+        
+        # Initialize conv weights
+        shape = (output_features,input_channels)+kernel_size
+        self.conv_weights = nn.Parameter(th.Tensor(th.Size(shape)))
+        init.dct(self.conv_weights)
+        
+        if convWeightSharing:
+            self.convt_weights = self.conv_weights
+        else:
+            self.convt_weights = nn.Parameter(th.Tensor(th.Size(shape)))
+            init.dct(self.convt_weights)
+        
+        # Initialize the scaling coefficients for the conv weight normalization
+        if scale_f and normalizedWeights:
+            self.scale_f = nn.Parameter(th.Tensor(output_features).fill_(1))
+        else:
+            self.register_parameter('scale_f', None)
+        
+        if scale_t and normalizedWeights:
+            if convWeightSharing and scale_f:
+                self.scale_t = self.scale_f
+            elif not convWeightSharing or (convWeightSharing and not scale_f):
+                self.scale_t = nn.Parameter(th.Tensor(output_features).fill_(1))
+        else :
+            self.register_parameter('scale_t', None)
+        
+        # Initialize the params for the proxL2
+        if alpha :
+            self.alpha_prox = nn.Parameter(th.Tensor(1).fill_(0))
+        else:
+            self.register_parameter('alpha_prox', None)
+        
+        # Initialize the rbf_weights
+        self.rbf_weights = nn.Parameter(th.Tensor(output_features,rbf_mixtures).fill_(1e-4))
+        self.rbf_centers = th.linspace(lb,ub,rbf_mixtures).type_as(self.rbf_weights)
+        self.rbf_precision = rbf_precision
+        #self.rbf_data = init.rbf_lut(self.rbf_centers,self.rbf_precision,rbf_start,rbf_end,rbf_step).type_as(self.rbf_weights)
+        
+    def forward(self,input,stdn,rbf_data,net_input = None):
+        if net_input is None:
+            # If input is a variable with require_grad = True, then net_input 
+            # will be a variable with require_grad = False. 
+            # net_input = input.data.clone() 
+            net_input = input
+        return cascades.residualDenoise_grbf(input,net_input,self.conv_weights,\
+            self.convt_weights,self.rbf_weights,self.rbf_centers,\
+            self.rbf_precision,rbf_data,self.alpha_prox,stdn,self.pad,\
+            self.padType,self.scale_f,self.scale_t,self.normalizedWeights,\
+            self.zeroMeanWeights,self.lb,self.ub)
+    
+    def __repr__(self):
+        return self.__class__.__name__ + '(' \
+            + 'kernel_size = ' + str(tuple(self.conv_weights.shape[2:])) \
+            + ', input_channels = ' + str(self.conv_weights.shape[1]) \
+            + ', output_features = ' + str(self.conv_weights.shape[0]) \
+            + ', rbf_mixtures = ' + str(self.rbf_centers.numel()) \
+            + ', normalizedWeights = ' + str(self.normalizedWeights) \
+            + ', zeroMeanWeights = ' + str(self.zeroMeanWeights) \
+            + ', convWeightSharing = ' + str(self.conv_weights is self.convt_weights) + ')'
+
+
+class ResidualPreActivationLayer(nn.Module):
+    
+    def __init__(self, kernel1_size,\
+                 kernel2_size,\
+                 input_channels,\
+                 output_features,\
+                 bias1 = False,\
+                 bias2 = False,\
+                 dilation1 = 1,\
+                 dilation2 = 1,\
+                 numparams_prelu1 = 1,\
+                 numparams_prelu2 = 1,\
+                 prelu_init = 0.1,\
+                 padType = 'symmetric',\
+                 scale1 = True,\
+                 scale2 = True,\
+                 normalizedWeights = True,\
+                 zeroMeanWeights = True,\
+                 weights_init = 'msra',\
+                 shortcut = False):
+        
+        super(ResidualPreActivationLayer, self).__init__()
+        
+        self.normalizedWeights = formatInput2Tuple(normalizedWeights,bool,2)
+        self.zeroMeanWeights = formatInput2Tuple(zeroMeanWeights,bool,2)
+        self.shortcut = shortcut
+        self.dilation1 = formatInput2Tuple(dilation1,int,2)
+        self.dilation2 = formatInput2Tuple(dilation2,int,2)
+        self.padType = padType
+        
+        kernel1_size = formatInput2Tuple(kernel1_size,int,2)
+        kernel2_size = formatInput2Tuple(kernel2_size,int,2)
+
+        # Init of conv1 weights
+        shape = (output_features,input_channels)+kernel1_size
+        self.conv1_weights = nn.Parameter(th.Tensor(th.Size(shape)))
+        init.msra(self.conv1_weights)
+        # Init of conv2 weights
+        shape = (input_channels,output_features)+kernel2_size
+        self.conv2_weights = nn.Parameter(th.Tensor(th.Size(shape)))
+        init.convWeights(self.conv2_weights,weights_init)
+        
+        # Initialize the scaling coefficients for the conv weights normalization
+        if scale1 and self.normalizedWeights[0]:
+            self.scale1 = nn.Parameter(th.Tensor(output_features).fill_(1))
+        else:
+            self.register_parameter('scale1', None)        
+        
+        if scale2 and self.normalizedWeights[1]:
+            self.scale2 = nn.Parameter(th.Tensor(input_channels).fill_(1))
+        else:
+            self.register_parameter('scale2', None)        
+
+        if bias1:
+            self.bias1 = nn.Parameter(th.Tensor(output_features).fill_(0))
+        else:
+            self.register_parameter('bias1', None)    
+
+        if bias2:
+            self.bias2 = nn.Parameter(th.Tensor(input_channels).fill_(0))
+        else:
+            self.register_parameter('bias2', None)               
+
+        # Init of prelu weights
+        self.prelu1_weights = nn.Parameter(th.Tensor(numparams_prelu1).fill_(prelu_init))
+        self.prelu2_weights = nn.Parameter(th.Tensor(numparams_prelu2).fill_(prelu_init))
+    
+    def forward(self,input):
+        return cascades.residualPreActivation_prelu(input,self.conv1_weights,\
+                self.conv2_weights,self.prelu1_weights,self.prelu2_weights,\
+                self.bias1,self.scale1,self.dilation1,self.bias2,self.scale2,\
+                self.dilation2,self.normalizedWeights,self.zeroMeanWeights,\
+                self.shortcut,self.padType)
+        
+    def __repr__(self):
+        return self.__class__.__name__ + '(' \
+            + 'kernel1_size = ' + str(tuple(self.conv1_weights.shape[2:])) \
+            + ', kernel2_size = ' + str(tuple(self.conv2_weights.shape[2:])) \
+            + ', input_channels = ' + str(self.conv1_weights.shape[1]) \
+            + ', output_features = ' + str(self.conv1_weights.shape[0]) \
+            + ', shortcut = ' + str(self.shortcut) \
+            + ', normalizedWeights = ' + str(self.normalizedWeights) \
+            + ', zeroMeanWeights = ' + str(self.zeroMeanWeights) + ')'
+
+class NConv2D(nn.Module):
+    
+    def __init__(self,kernel_size,\
+                 input_channels,\
+                 output_features,\
+                 bias=False,\
+                 stride=1,\
+                 pad = 'same',\
+                 padType = 'symmetric',\
+                 conv_init = 'dct',\
+                 scale = False,\
+                 normalizedWeights=False,\
+                 zeroMeanWeights=False):
+        
+        super(NConv2D,self).__init__()
+        
+        kernel_size = formatInput2Tuple(kernel_size,int,2)
+        
+        if isinstance(pad,str) and pad == 'same':
+            pad = getPad2RetainShape(kernel_size)
+#            # center of the kernel
+#            Kc = th.Tensor(kernel_size).add(1).div(2).floor()
+#            pad = (int(Kc[0])-1, kernel_size[0]-int(Kc[0]),\
+#                   int(Kc[1])-1,kernel_size[1]-int(Kc[1]))        
+        
+        self.pad = formatInput2Tuple(pad,int,4)
+        self.padType = padType
+        self.stride = formatInput2Tuple(stride,int,2)
+        
+        # Initialize conv weights
+        shape = (output_features,input_channels)+kernel_size
+        self.conv_weights = nn.Parameter(th.Tensor(th.Size(shape)))
+        init.convWeights(self.conv_weights,conv_init)
+        
+        # Initialize the scaling coefficients for the conv weight normalization
+        if scale and normalizedWeights:
+            self.scale = nn.Parameter(th.Tensor(output_features).fill_(1))
+        else:
+            self.register_parameter('scale', None)
+        
+        if bias:
+            self.bias = nn.Parameter(th.Tensor(output_features).fill_(0))
+        else:
+            self.register_parameter('bias', None)           
+    
+    def forward(self,input):
+        
+        return cascades.nconv2D(input,self.conv_weights,self.bias,self.stride,\
+                                self.pad,self.padType,1,self.scale,\
+                                self.normalizedWeights,self.zeroMeanWeights)
+    def __repr__(self):
+        return self.__class__.__name__ + '(' \
+            + 'kernel_size = ' + str(tuple(self.conv_weights.shape[2:])) \
+            + ', input_channels = ' + str(self.conv_weights.shape[1]) \
+            + ', output_features = ' + str(self.conv_weights.shape[0]) \
+            + ', padType = ' + self.padType\
+            + ', pad = ' + str(self.pad)\
+            + ', normalizedWeights = ' + str(self.normalizedWeights) \
+            + ', zeroMeanWeights = ' + str(self.zeroMeanWeights) + ')'
+
+class NConv_transpose2D(nn.Module):
+    
+    def __init__(self,kernel_size,\
+                 input_channels,\
+                 output_features,\
+                 bias=False,\
+                 stride=1,\
+                 pad = 'same',\
+                 padType = 'symmetric',\
+                 conv_init = 'dct',\
+                 scale = False,\
+                 normalizedWeights=False,\
+                 zeroMeanWeights=False):
+        
+        super(NConv_transpose2D,self).__init__()
+        
+        kernel_size = formatInput2Tuple(kernel_size,int,2)
+        
+        if isinstance(pad,str) and pad == 'same':
+            # center of the kernel
+            Kc = th.Tensor(kernel_size).add(1).div(2).floor()
+            pad = (int(Kc[0])-1, kernel_size[0]-int(Kc[0]),\
+                   int(Kc[1])-1,kernel_size[1]-int(Kc[1]))        
+        
+        
+        self.pad = formatInput2Tuple(pad,int,4)
+        self.padType = padType
+        self.stride = formatInput2Tuple(stride,int,2)
+        
+        # Initialize conv weights
+        shape = (output_features,input_channels)+kernel_size
+        self.conv_weights = nn.Parameter(th.Tensor(th.Size(shape)))
+        init.convWeights(self.conv_weights,conv_init)
+        
+        # Initialize the scaling coefficients for the conv weight normalization
+        if scale and normalizedWeights:
+            self.scale = nn.Parameter(th.Tensor(output_features).fill_(1))
+        else:
+            self.register_parameter('scale', None)
+        
+        if bias:
+            self.bias = nn.Parameter(th.Tensor(input_channels).fill_(0))
+        else:
+            self.register_parameter('bias', None)           
+    
+    def forward(self,input):
+        
+        return cascades.nconv_transpose2D(input,self.conv_weights,self.bias,\
+                             self.stride,self.pad,self.padType,1,self.scale,\
+                             self.normalizedWeights,self.zeroMeanWeights)
+    def __repr__(self):
+        return self.__class__.__name__ + '(' \
+            + 'kernel_size = ' + str(tuple(self.conv_weights.shape[2:])) \
+            + ', input_channels = ' + str(self.conv_weights.shape[1]) \
+            + ', output_features = ' + str(self.conv_weights.shape[0]) \
+            + ', padType = ' + self.padType\
+            + ', pad = ' + str(self.pad)\
+            + ', normalizedWeights = ' + str(self.normalizedWeights) \
+            + ', zeroMeanWeights = ' + str(self.zeroMeanWeights) + ')'

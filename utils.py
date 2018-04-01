@@ -1,0 +1,1448 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Sun Mar 25 22:50:33 2018
+
+@author: Stamatis Lefkimmiatis
+@email : s.lefkimmatis@skoltech.ru
+"""
+import torch as th
+import numpy as np
+from scipy.fftpack import dct, dctn
+from functools import reduce
+import math
+
+
+def reverse(input,dim=0) :
+    r"""Reverses the specified dimension of the input tensor."""
+    Dims = input.dim()
+    assert (dim < Dims), "The selected dimension (arg 2) exceeds the tensor's dimensions."
+    idx = th.arange(input.size(dim)-1,-1,-1).type_as(input).long()
+    return input.index_select(dim,idx)
+
+def log10(input):
+    return input.log().div(th.Tensor([10]).type_as(input).log())
+    
+def psnr(input,other,peakVal = None, average = False, nargout = 1):
+    
+    if peakVal is None:
+        peakVal = other.max()
+    
+    assert(input.shape == other.shape), "Dimensions mismatch between the two "\
+    "input tensors."
+    
+    while input.dim() < 4:
+        input = input.unsqueeze(0)
+    while other.dim() < 4:
+        other = other.unsqueeze(0)
+    
+    N = input.numel()
+    batch = input.size(0)
+    
+    if N == 0:
+        SNR = float('nan')
+        MSE = 0
+        return SNR, MSE
+    
+    MSE = (input-other).view(batch,-1).pow(2).mean(dim=1)
+    
+    #SNR = (10*th.log(peakVal**2/MSE)).div(math.log(10))
+    SNR = 10*log10(peakVal**2/MSE)
+    
+    if average:
+        return (SNR.mean(), MSE.mean()) if nargout == 2 else SNR.mean()
+    else:
+        return (SNR, MSE) if nargout == 2 else SNR
+
+
+def zeroPad2D(input,pad = 0):
+    r"""Pads with zeros the spatial dimensions (last two dimensions) of the 
+    input tensor. PAD specifies the amount of padding as [TOP, BOTTOM, LEFT, RIGHT].
+    If pad is an integer then each direction is padded by the same amount. In
+    order to achieve a different amount of padding in each direction of the 
+    tensor, pad needs to be a tuple."""
+
+    # pad = [top,bottom,left,right]
+    
+    if isinstance(pad,int):
+        assert(pad >= 0), """Pad must be either a non-negative integer 
+        or a tuple."""
+        pad = (pad,)*4  
+        
+    sflag = False
+    if input.dim() == 1:
+        sflag = True
+        input = input.unsqueeze(1)
+        
+    assert(isinstance(pad,tuple) and len(pad) == 4), \
+    " A tuple with 4 values for padding is expected as input."
+        
+    sz = list(input.size())
+    
+    assert (pad[0] >= 0 and pad[1] >= 0 and pad[2] >= 0 and pad[3] >= 0), \
+            "Padding must be non-negative in each dimension."
+            
+    assert(pad[0] < sz[-2] and pad[1] < sz[-2] and \
+           pad[2] < sz[-1] and pad[3] < sz[-1]), \
+    "The padding values exceed the tensor's dimensions."    
+    
+    sz[-1] = sz[-1] + sum(pad[2::])
+    sz[-2] = sz[-2] + sum(pad[0:2])
+    
+    out = th.zeros(sz).type_as(input)
+    out[...,pad[0]:sz[-2]-pad[1]:1,pad[2]:sz[-1]-pad[3]:1] = input
+    
+    if sflag:
+        out.squeeze_()
+    
+    return out
+
+def crop2D(input,crop):
+    r"""Cropping the spatial dimensions (last two dimensions) of the 
+    input tensor. This is the adjoint operation of zeroPad2D. Crop specifies 
+    the amount of cropping as [TOP, BOTTOM, LEFT, RIGHT]. If crop is an integer 
+    then each direction is cropped by the same amount. In order to achieve a 
+    different amount of cropping in each direction of the  tensor, crop needs 
+    to be a tuple."""    
+    
+    if isinstance(crop,int):
+        assert(crop >= 0), """Crop must be either a non-negative integer 
+        or a tuple."""
+        crop = (crop,)*4  
+        
+    sflag = False
+    if input.dim() == 1:
+        sflag = True
+        input = input.unsqueeze(1)        
+             
+    assert(isinstance(crop,tuple) and len(crop) == 4), \
+    " A tuple with 4 values for padding is expected as input."
+        
+    sz = list(input.size())    
+    
+    assert (crop[0] >= 0 and crop[1] >= 0 and crop[2] >= 0 and crop[3] >= 0), \
+            "Crop must be non-negative in each dimension."    
+    
+    assert (crop[0] + crop[1] <= sz[-2] and crop[2] + crop[3] <= sz[-1]), \
+            "Crop does not have valid values."
+    
+    out = input[...,crop[0]:sz[-2]-crop[1]:1,crop[2]:sz[-1]-crop[3]:1]
+    
+    if sflag:
+        out.unsqueeze_()
+    
+    return out
+    
+def symmetricPad2D(input,pad = 0):
+    r"""Pads symmetrically the spatial dimensions (last two dimensions) of the 
+    input tensor. PAD specifies the amount of padding as [TOP, BOTTOM, LEFT, RIGHT].
+    If pad is an integer then each direction is padded by the same amount. In
+    order to achieve a different amount of padding in each direction of the 
+    tensor, pad needs to be a tuple."""
+          
+    # pad = [top,bottom,left,right]
+    
+    if isinstance(pad,int):
+        assert(pad >= 0), """Pad must be either a non-negative integer 
+        or a tuple."""
+        pad = (pad,)*4  
+        
+    sflag = False
+    if input.dim() == 1:
+        sflag = True
+        input = input.unsqueeze(1)
+             
+    assert(isinstance(pad,tuple) and len(pad) == 4), \
+    " A tuple with 4 values for padding is expected as input."
+        
+    sz = list(input.size())
+    
+    assert (pad[0] >= 0 and pad[1] >= 0 and pad[2] >= 0 and pad[3] >= 0), \
+            "Padding must be non-negative in each dimension."
+            
+    assert(pad[0] < sz[-2] and pad[1] < sz[-2] and \
+           pad[2] < sz[-1] and pad[3] < sz[-1]), \
+    "The padding values exceed the tensor's dimensions."
+    
+    sz[-1] = sz[-1] + sum(pad[2::])
+    sz[-2] = sz[-2] + sum(pad[0:2])
+    
+    out = th.zeros(sz).type_as(input)
+    
+    # Copy the original tensor to the central part
+    out[...,pad[0]:out.size(-2)-pad[1], \
+        pad[2]:out.size(-1)-pad[3]] = input
+    
+    # Pad Top
+    if pad[0] != 0:
+        out[...,0:pad[0],:] = reverse(out[...,pad[0]:2*pad[0],:],-2)
+    
+    # Pad Bottom
+    if pad[1] != 0:
+        out[...,out.size(-2)-pad[1]::,:] = reverse(out[...,out.size(-2)
+            -2*pad[1]:out.size(-2)-pad[1],:],-2)
+    
+    # Pad Left
+    if pad[2] != 0:
+        out[...,:,0:pad[2]] = reverse(out[...,:,pad[2]:2*pad[2]],-1)
+    
+    # Pad Right
+    if pad[3] != 0:
+        out[...,:,out.size(-1)-pad[3]::] = reverse(out[...,:,out.size(-1)
+            -2*pad[3]:out.size(-1)-pad[3]],-1)    
+    
+    if sflag:
+        out.squeeze_()
+        
+    return out
+
+
+def symmetricPad_transpose2D(input,crop = 0):
+    r"""Adjoint of the SymmetricPad2D operation which amounts to a special type
+    of cropping. CROP specifies the amount of cropping as [TOP, BOTTOM, LEFT, RIGHT].
+    If crop is an integer then each direction is cropped by the same amount. In
+    order to achieve a different amount of cropping in each direction of the 
+    tensor, crop needs to be a tuple."""          
+    
+    # crop = [top,bottom,left,right]
+    
+    if isinstance(crop,int):
+        assert(crop >= 0), """Crop must be either a non-negative integer 
+        or a tuple."""
+        crop = (crop,)*4  
+        
+    sflag = False
+    if input.dim() == 1:
+        sflag = True
+        input = input.unsqueeze(1)        
+             
+    assert(isinstance(crop,tuple) and len(crop) == 4), \
+    " A tuple with 4 values for padding is expected as input."
+        
+    sz = list(input.size())
+    
+    
+    assert (crop[0] >= 0 and crop[1] >= 0 and crop[2] >= 0 and crop[3] >= 0), \
+            "Crop must be non-negative in each dimension."    
+    
+    assert (crop[0] + crop[1] <= sz[-2] and crop[2] + crop[3] <= sz[-1]), \
+            "Crop does not have valid values."
+    
+    out = input.clone()
+    
+    # Top
+    if crop[0] != 0:
+        out[...,crop[0]:2*crop[0],:] += reverse(out[...,0:crop[0],:],-2)
+    
+    # Bottom 
+    if crop[1] != 0:
+    # out[...,sz[-2]-2*crop[1]:sz[-2]-crop[1],:] += reverse(out[...,sz[-2]-crop[1]::,:],-2) 
+        out[...,-2*crop[1]:-crop[1],:] += reverse(out[...,-crop[1]::,:],-2) 
+    
+    # Left 
+    if crop[2] != 0:
+        out[...,crop[2]:2*crop[2]] += reverse(out[...,0:crop[2]],-1)
+    
+    # Right
+    if crop[3] != 0:
+    # out[...,sz[-1]-2*crop[3]:sz[-1]-crop[3],:] += reverse(out[...,sz[-1]-crop[3]::,:],-1) 
+        out[...,-2*crop[3]:-crop[3]] += reverse(out[...,-crop[3]::],-1) 
+    
+    if crop[1] == 0:
+        end_h = sz[-2]+1 
+    else:
+        end_h = sz[-2]-crop[1]
+        
+    if crop[3] == 0:
+        end_w = sz[-1]+1
+    else:
+        end_w = sz[-1]-crop[3]
+        
+    out = out[...,crop[0]:end_h,crop[2]:end_w]
+    
+    
+    if sflag:
+        out.squeeze_()
+        
+    return out
+
+def pad2D(input,pad=0,padType='zero'):
+    r"""Pads the spatial dimensions (last two dimensions) of the 
+    input tensor. PAD specifies the amount of padding as [TOP, BOTTOM, LEFT, RIGHT].
+    If pad is an integer then each direction is padded by the same amount. In
+    order to achieve a different amount of padding in each direction of the 
+    tensor, pad needs to be a tuple. PadType specifies the type of padding.
+    Valid padding types are "zero" and "symmetric". """
+    
+    pad = formatInput2Tuple(pad,int,4)
+    
+    if sum(pad) == 0:
+        return input
+    
+    if padType == 'zero':
+        return zeroPad2D(input,pad)
+    elif padType == 'symmetric':
+        return symmetricPad2D(input,pad)
+    else:
+        raise NotImplementedError("Unknown padding type.")
+
+def pad_transpose2D(input,pad=0,padType='zero'):
+    r"""Transpose operation of pad2D. PAD specifies the amount of padding as 
+    [TOP, BOTTOM, LEFT, RIGHT].
+    If pad is an integer then each direction is padded by the same amount. In
+    order to achieve a different amount of padding in each direction of the 
+    tensor, pad needs to be a tuple. PadType specifies the type of padding.
+    Valid padding types are "zero" and "symmetric". """    
+    
+    pad = formatInput2Tuple(pad,int,4)
+    
+    if sum(pad) == 0:
+        return input
+    
+    if padType == 'zero':
+        return crop2D(input,pad)
+    elif padType == 'symmetric':
+        return symmetricPad_transpose2D(input,pad)
+    else:
+        raise NotImplementedError("Uknown padding type.")
+    
+
+def signum(input):
+    out = - th.ones_like(input)
+    out[input > 0] = 1
+    return out
+
+def dctmtx(support,dtype):
+    D = np.eye(support,dtype = dtype)
+    return th.from_numpy(dct(D, axis = 0, norm = 'ortho'))
+
+def gen_dct2_kernel(support,dtype = 'f', GPU = False, nargout = 1):
+    r"""If two output arguments are returned then:
+    h1 has dimensions [Px,1,Px,1] and h2 has dimensions [Py,1,1,Py] where
+    Px = support[0] and  Py = support[1].
+    
+    If a single output argument is returned then:
+    h has dimensions [Px*Py 1 Px Py].
+    
+    support : Either an integer or a tuple
+    
+    Usage example :
+    
+    x = th.randn(1,1,16,16).double()
+    h = utils.gen_dct2_kernel(8,'d',nargout = 1)
+    Dx = th.conv2d(x,h,stride = (8,8)) % it computes the 2D DCT of each 
+    % non-overlapping block of size 8x8
+    
+    for k in range(2):
+        for l in range(2):
+            s = x[:,:,k*8:(k+1)*8,l*8:(l+1)*8].numpy().squeeze()
+            Ds = th.from_numpy(dctn(s,norm = 'ortho').flatten())
+            err = Ds - Dx[:,:,k,l]
+            print(err.abs().sum())
+    
+    Usage example 2:
+    
+    x = th.randn(1,1,16,16).double()
+    h1,h2 = utils.gen_dct2_kernel(8,'d',nargout = 2)
+    Dx = th.conv2d(x,h1,stride = (8,1)) % it computes the 1D DCT of each 
+    % non-overlapping block of size 8x1
+    Dx = Dx.view(8,1,2,16)
+    Dx = th.conv2d(Dx,h2,stride = (1,8)) % it computes the 1D DCT of each
+    % non-overlapping block of size 1x8
+    Dx = Dx.view(1,64,2,2)
+    
+    for k in range(2):
+        for l in range(2):
+            s = x[:,:,k*8:(k+1)*8,l*8:(l+1)*8].numpy().squeeze()
+            Ds = th.from_numpy(dctn(s,norm = 'ortho').flatten())
+            err = Ds - Dx[:,:,k,l]
+            print(err.abs().sum())    
+    
+    """
+    assert(nargout == 1 or nargout ==2), "One or two output arguments "\
+    "are expected."
+    
+    
+    if isinstance(support,int):
+        support = (support,support)
+    
+    if len(support) < 2:
+        support = support * 2
+        
+    if nargout == 2:
+        D = dctmtx(support[0],dtype)
+        h1 = D.view(support[0],1,support[0],1)
+        if support[1] != support[0]:
+            D = dctmtx(support[1],dtype)
+        h2 = D.view(support[1],1,1,support[1])
+        
+        if th.cuda.is_available and GPU:
+            h1 = h1.cuda()
+            h2 = h2.cuda()
+                   
+        return h1,h2
+    else :
+        h = np.zeros((reduce(lambda x, y: x*y, support[0:2]),1,support[0],support[1]),dtype)
+        dirac = np.zeros(support[0:2],dtype)
+        for k in np.arange(support[0]):
+            for l in np.arange(support[1]):
+                dirac[k,l] = 1;
+                h[:,0,k,l] = dctn(dirac,norm = 'ortho').flatten()
+                dirac[k,l] = 0
+        
+        h = th.from_numpy(h)
+        if th.cuda.is_available and GPU:
+            h = h.cuda()
+        
+        return h
+
+def gen_dct3_kernel(support,dtype = 'f', GPU = False, nargout = 1):
+    r"""If three output arguments are returned then:
+    h1 has dimensions [Pz,Pz,1,1], h2 has dimensions [Px,1,Px,1] and 
+    h3 has dimensions [Py,1,1,Py] where Pz = support[0], Px = support[1] and 
+    Py = support[2].
+    
+    If two output arguments are returned then:
+    h1 has dimensions [Pz,Pz,1,1] and h2 has dimensions [Px*Py,1,Px,Py].
+    
+    If a single output argument is returned then:
+    h has dimensions [Px*Py*Pz Pz Px Py].
+    
+    support : Either an integer or a tuple 
+    
+    Usage example :
+    from scipy.fftpack import dctn
+    x = th.randn(1,3,16,16).double()
+    h = utils.gen_dct3_kernel((3,8,8),'d',nargout = 1)
+    Dx = th.conv2d(x,h,stride = (8,8)) % it computes the 3D DCT of each 
+    % non-overlapping block of size 3x8x8
+    
+    for k in range(2):
+        for l in range(2):
+            s = x[:,:,k*8:(k+1)*8,l*8:(l+1)*8].numpy().squeeze()
+            Ds = th.from_numpy(dctn(s,norm = 'ortho').flatten())
+            err = Ds - Dx[:,:,k,l]
+            print(err.abs().sum())
+    
+    Usage example 2:
+    
+    x = th.randn(1,3,16,16).double()
+    h1,h2 = utils.gen_dct3_kernel((3,8,8),'d',nargout = 2)
+    Dx = th.conv2d(x,h1,stride = 1) % it computes the 1D DCT along the 3rd  
+    % dimension.
+    Dx = th.conv2d(Dx.view(3,1,16,16),h2,stride = (8,8)) % it computes the 2D 
+    % DCT along the spatial dimensions
+    Dx = Dx.view(1,3*64,2,2)
+    
+    for k in range(2):
+        for l in range(2):
+            s = x[:,:,k*8:(k+1)*8,l*8:(l+1)*8].numpy().squeeze()
+            Ds = th.from_numpy(dctn(s,norm = 'ortho').flatten())
+            err = Ds - Dx[:,:,k,l]
+            print(err.abs().sum())
+
+    Usage example 3:
+    
+    x = th.randn(1,3,16,16).double()
+    h1,h2,h3 = utils.gen_dct3_kernel((3,8,8),'d',nargout = 3)
+    Dx = th.conv2d(x,h1,stride = 1) % it computes the 1D DCT along the 3rd 
+    % dimension. 
+    Dx = th.conv2d(Dx.view(3,1,16,16),h2,stride = (8,1)) % it computes the 1D 
+    % DCT along the first spatial dimension
+    Dx = th.conv2d(Dx.view(3*8,1,2,16),h3,stride = (1,8)) % it computes the 1D DCT along the channel
+    % dimension (of size 3)
+    Dx = Dx.view(1,24*8,2,2)
+    
+    for k in range(2):
+        for l in range(2):
+            s = x[:,:,k*8:(k+1)*8,l*8:(l+1)*8].numpy().squeeze()
+            Ds = th.from_numpy(dctn(s,norm = 'ortho').flatten())
+            err = Ds - Dx[:,:,k,l]
+            print(err.abs().sum())
+    
+    """
+    assert(nargout == 1 or nargout ==2 or nargout == 3), "From one to three "\
+    "output arguments are expected."
+    
+    
+    if isinstance(support,int):
+        support = (support,support,support)
+    
+    if len(support) < 2:
+        support = support * 3
+    
+    if len(support) < 3:
+        support = (1,)+support
+    
+    if nargout == 3:
+        D = dctmtx(support[0],dtype)
+        h1 = D.view(support[0],support[0],1,1)
+        if support[1] != support[0]:
+            D = dctmtx(support[1],dtype)
+        h2 = D.view(support[1],1,support[1],1)
+        if support[2] != support[1]:
+            D = dctmtx(support[2],dtype)
+        h3 = D.view(support[2],1,1,support[2])
+        
+        if th.cuda.is_available and GPU:
+            h1 = h1.cuda()
+            h2 = h2.cuda()
+            h3 = h3.cuda()
+                   
+        return h1,h2,h3            
+    elif nargout == 2:
+        D = dctmtx(support[0],dtype)
+        h1 = D.view(support[0],support[0],1,1)
+
+        h2 = np.zeros((reduce(lambda x, y: x*y, support[1:3]),1,support[1],support[2]),dtype)
+        dirac = np.zeros(support[1:3],dtype)
+        for k in np.arange(support[1]):
+            for l in np.arange(support[2]):
+                dirac[k,l] = 1;
+                h2[:,0,k,l] = dctn(dirac,norm = 'ortho').flatten()
+                dirac[k,l] = 0
+        
+        h2 = th.from_numpy(h2)        
+        
+        if th.cuda.is_available and GPU:
+            h1 = h1.cuda()
+            h2 = h2.cuda()
+                   
+        return h1,h2
+    else :
+        h = np.zeros((reduce(lambda x, y: x*y, support[0:3]),support[0],support[1],support[2]),dtype)
+        dirac = np.zeros(support[0:3],dtype)
+        for k in np.arange(support[0]):
+            for l in np.arange(support[1]):
+                for m in np.arange(support[2]):
+                    dirac[k,l,m] = 1;
+                    h[:,k,l,m] = dctn(dirac,norm = 'ortho').flatten()
+                    dirac[k,l,m] = 0
+        
+        h = th.from_numpy(h)
+        if th.cuda.is_available and GPU:
+            h = h.cuda()
+        
+        return h
+
+
+def __shift(x,s,bc='circular'):
+    """ Shift operator that can treat different boundary conditions. It applies 
+    to a tensor of arbitrary dimensions. 
+    ----------
+    Usage: xs = shift(x,(0,1,-3,3),'reflexive')
+    ----------
+    Parameters
+    ----------
+    x : tensor.
+    s : tuple that matches the dimensions of x, with the corresponding shifts.
+    bc: String with the prefered boundary conditions (bc='circular'|'reflexive'|'zero')
+        (Default: 'circular')
+    """
+    
+    if not isinstance(bc, str):
+        raise Exception("bc must be of type string")
+       
+    if not reduce(lambda x,y : x and y, [isinstance(k,int) for k in s]):
+        raise Exception("s must be a tuple of ints")
+           
+    if len(s) < x.dim():
+       s = s + (0,) * (x.dim()-len(s))        
+    elif len(s) > x.dim():
+        print("The shift values will be truncated to match the " \
+        +"dimensions of the input tensor. The trailing extra elements will" \
+        +" be discarded.")
+        s = s[0:x.dim()]
+    
+    if reduce(lambda x,y : x or y, [ math.fabs(s[i]) > x.shape[i] for i in range(x.dim())]):
+        raise Exception("The shift steps should not exceed in absolute values"\
+        +" the size of the corresponding dimensions.")
+
+    # use a list sequence instead of a tuple since the latter is an 
+    # immutable sequence and cannot be altered         
+    indices = [slice(0,x.shape[0])]
+    for i in range(1,x.dim()):
+        indices.append(slice(0,x.shape[i]))
+        
+    if bc == 'circular':
+        xs = x[:] # make a copy of x
+        for i in range(x.dim()):
+            if s[i] == 0:
+                continue
+            else:
+                m = x.shape[i]
+                idx = indices[:]                
+                idx[i] = (np.arange(0,m)-s[i])%m
+                xs = xs[tuple(idx)]
+    elif bc == 'reflexive':
+        xs = x[:] # make a copy of x
+        for i in range(x.dim()):
+            if s[i] == 0:
+                continue
+            else:
+                idx = indices[:]
+                if s[i] > 0: # right shift                    
+                    idx[i] = list(range(s[i]-1,-1,-1)) + list(range(0,x.shape[i]-s[i]))
+                else: # left shift
+                    idx[i] = list(range(-s[i],x.shape[i])) + \
+                    list(range(x.shape[i]-1,x.shape[i]+s[i]-1,-1))
+                
+                xs = xs[tuple(idx)]
+    elif bc == 'zero':
+        xs=th.zeros_like(x)        
+        idx_x=indices[:]
+        idx_xs=indices[:]
+        for i in range(x.dim()):
+            if s[i] == 0:
+                continue
+            else:       
+                if s[i] > 0: # right shift
+                    idx_x[i] = slice(0,x.shape[i]-s[i])
+                    idx_xs[i] = slice(s[i],x.shape[i])
+                else: # left shift
+                    idx_x[i] = slice(-s[i],x.shape[i])
+                    idx_xs[i] = slice(0,x.shape[i]+s[i])
+        
+        xs[tuple(idx_xs)] = x[tuple(idx_x)]
+        
+    else:
+        raise Exception("Unknown boundary conditions")
+    
+    return xs
+
+def __shift_transpose(x,s,bc='circular'):
+        
+    r""" Transpose of the shift operator that can treat different boundary conditions. 
+    It applies to a tensor of arbitrary dimensions. 
+    ----------
+    Usage: xs = shift_transpose(x,(0,1,-3,3),'reflexive')
+    ----------
+    Parameters
+    ----------
+    x : tensor.
+    s : tuple that matches the dimensions of x, with the corresponding shifts.
+    bc: String with the prefered boundary conditions (bc='circular'|'reflexive'|'zero')
+        (Default: 'circular')
+    """   
+    
+    if not isinstance(bc, str):
+        raise Exception("bc must be of type string")
+       
+    if not reduce(lambda x,y : x and y, [isinstance(k,int) for k in s]):
+        raise Exception("s must be a tuple of ints")
+           
+    if len(s) < x.dim():
+       s = s + (0,)* (x.dim()-len(s))        
+    elif len(s) > x.dim():
+        print("The shift values will be truncated to match the " \
+        +"dimensions of the input tensor. The trailing extra elements will" \
+        +" be discarded.")
+        s = s[0:x.dim()]
+    
+    if reduce(lambda x,y : x or y, [ math.fabs(s[i]) > x.shape[i] for i in range(x.dim())]):
+        raise Exception("The shift steps should not exceed in absolute values"\
+        +" the size of the corresponding dimensions.")
+        
+    # use a list sequence instead of a tuple since the latter is an 
+    # immutable sequence and cannot be altered 
+    indices=[slice(0,x.shape[0])]
+    for i in range(1,x.dim()):
+        indices.append(slice(0,x.shape[i]))
+        
+    if bc == 'circular':
+        xs = x[:] # make a copy of x
+        for i in range(x.dim()):
+            if s[i] == 0:
+                continue
+            else:
+                m = x.shape[i]
+                idx = indices[:]                
+                idx[i] = (np.arange(0,m)+s[i])%m
+                xs = xs[tuple(idx)]
+    elif bc == 'reflexive':
+        y=x[:]
+        for i in range(x.dim()):
+            xs = th.zeros_like(x)
+            idx_x_a = indices[:]
+            #idx_x_b = indices[:]
+            idx_xs_a = indices[:]
+            idx_xs_b = indices[:]
+            if s[i] == 0:
+                xs = y[:]
+            else:
+                if s[i] > 0:
+                    idx_xs_a[i] = slice(0,-s[i])
+                    idx_xs_b[i] = slice(0,s[i])
+                    idx_x_a[i] = slice(s[i],None)
+                    #idx_x_b[i] = slice(s[i]-1,None,-1) #Pytorch does not 
+                    # support negative steps
+                else:
+                    idx_xs_a[i] = slice(-s[i],None)
+                    idx_xs_b[i] = slice(s[i],None)
+                    idx_x_a[i] = slice(0,s[i])
+                    #idx_x_b[i] = slice(-1,s[i]-1,-1) #Pytorch does not 
+                    # support negative steps
+                
+                xs[tuple(idx_xs_a)] = y[tuple(idx_x_a)]
+                xs[tuple(idx_xs_b)] += reverse(y[tuple(idx_xs_b)],dim = i)
+                #xs[tuple(idx_xs_b)] += y[tuple(idx_x_b)]
+                y = xs[:]
+        
+    elif bc == 'zero':
+        xs = th.zeros_like(x)        
+        idx_x = indices[:]
+        idx_xs = indices[:]
+        for i in range(x.dim()):
+            if s[i] == 0:
+                continue
+            else:
+                if s[i] < 0: 
+                    idx_x[i] = slice(0,x.shape[i]+s[i])
+                    idx_xs[i] = slice(-s[i],x.shape[i])
+                else: 
+                    idx_x[i] = slice(s[i],x.shape[i])
+                    idx_xs[i] = slice(0,x.shape[i]-s[i])
+        
+        xs[tuple(idx_xs)] = x[tuple(idx_x)]
+        
+    else:
+        raise Exception("Unknown boundary conditions")
+    
+    return xs
+
+def shift(x,s,bc='circular'):
+    """ Shift operator that can treat different boundary conditions. It applies 
+    to a tensor of arbitrary dimensions. 
+    ----------
+    Usage: xs = shift(x,(0,1,-3,3),'reflexive')
+    ----------
+    Parameters
+    ----------
+    x : tensor.
+    s : tuple that matches the dimensions of x, with the corresponding shifts.
+    bc: String with the prefered boundary conditions (bc='circular'|'reflexive'|'zero')
+        (Default: 'circular')
+    """
+    
+    if not isinstance(bc, str):
+        raise Exception("bc must be of type string")
+       
+    if not reduce(lambda x,y : x and y, [isinstance(k,int) for k in s]):
+        raise Exception("s must be a tuple of ints")
+           
+    if len(s) < x.dim():
+       s = s + (0,) * (x.dim()-len(s))        
+    elif len(s) > x.dim():
+        print("The shift values will be truncated to match the " \
+        +"dimensions of the input tensor. The trailing extra elements will" \
+        +" be discarded.")
+        s = s[0:x.dim()]
+    
+    if reduce(lambda x,y : x or y, [ math.fabs(s[i]) > x.shape[i] for i in range(x.dim())]):
+        raise Exception("The shift steps should not exceed in absolute values"\
+        +" the size of the corresponding dimensions.")
+
+    # use a list sequence instead of a tuple since the latter is an 
+    # immutable sequence and cannot be altered         
+    indices = [slice(0,x.shape[0])]
+    for i in range(1,x.dim()):
+        indices.append(slice(0,x.shape[i]))
+        
+    if bc == 'circular':
+        xs = x.clone() # make a copy of x
+        for i in range(x.dim()):
+            if s[i] == 0:
+                continue
+            else:
+                m = x.shape[i]
+                idx = indices[:]                
+                idx[i] = (np.arange(0,m)-s[i])%m
+                xs = xs[tuple(idx)]
+    elif bc == 'reflexive':
+        xs = x.clone() # make a copy of x
+        for i in range(x.dim()):
+            if s[i] == 0:
+                continue
+            else:
+                idx = indices[:]
+                if s[i] > 0: # right shift                    
+                    idx[i] = list(range(s[i]-1,-1,-1)) + list(range(0,x.shape[i]-s[i]))
+                else: # left shift
+                    idx[i] = list(range(-s[i],x.shape[i])) + \
+                    list(range(x.shape[i]-1,x.shape[i]+s[i]-1,-1))
+                
+                xs = xs[tuple(idx)]
+    elif bc == 'zero':
+        xs=th.zeros_like(x)        
+        idx_x=indices[:]
+        idx_xs=indices[:]
+        for i in range(x.dim()):
+            if s[i] == 0:
+                continue
+            else:       
+                if s[i] > 0: # right shift
+                    idx_x[i] = slice(0,x.shape[i]-s[i])
+                    idx_xs[i] = slice(s[i],x.shape[i])
+                else: # left shift
+                    idx_x[i] = slice(-s[i],x.shape[i])
+                    idx_xs[i] = slice(0,x.shape[i]+s[i])
+        
+        xs[tuple(idx_xs)] = x[tuple(idx_x)]
+        
+    else:
+        raise Exception("Unknown boundary conditions")
+    
+    return xs
+
+def shift_transpose(x,s,bc='circular'):
+        
+    r""" Transpose of the shift operator that can treat different boundary conditions. 
+    It applies to a tensor of arbitrary dimensions. 
+    ----------
+    Usage: xs = shift_transpose(x,(0,1,-3,3),'reflexive')
+    ----------
+    Parameters
+    ----------
+    x : tensor.
+    s : tuple that matches the dimensions of x, with the corresponding shifts.
+    bc: String with the prefered boundary conditions (bc='circular'|'reflexive'|'zero')
+        (Default: 'circular')
+    """   
+    
+    if not isinstance(bc, str):
+        raise Exception("bc must be of type string")
+       
+    if not reduce(lambda x,y : x and y, [isinstance(k,int) for k in s]):
+        raise Exception("s must be a tuple of ints")
+           
+    if len(s) < x.dim():
+       s = s + (0,)* (x.dim()-len(s))        
+    elif len(s) > x.dim():
+        print("The shift values will be truncated to match the " \
+        +"dimensions of the input tensor. The trailing extra elements will" \
+        +" be discarded.")
+        s = s[0:x.dim()]
+    
+    if reduce(lambda x,y : x or y, [ math.fabs(s[i]) > x.shape[i] for i in range(x.dim())]):
+        raise Exception("The shift steps should not exceed in absolute values"\
+        +" the size of the corresponding dimensions.")
+        
+    # use a list sequence instead of a tuple since the latter is an 
+    # immutable sequence and cannot be altered 
+    indices=[slice(0,x.shape[0])]
+    for i in range(1,x.dim()):
+        indices.append(slice(0,x.shape[i]))
+        
+    if bc == 'circular':
+        xs = x.clone() # make a copy of x
+        for i in range(x.dim()):
+            if s[i] == 0:
+                continue
+            else:
+                m = x.shape[i]
+                idx = indices[:]                
+                idx[i] = (np.arange(0,m)+s[i])%m
+                xs = xs[tuple(idx)]
+    elif bc == 'reflexive':
+        y=x.clone()
+        for i in range(x.dim()):
+            xs = th.zeros_like(x)
+            idx_x_a = indices[:]
+            #idx_x_b = indices[:]
+            idx_xs_a = indices[:]
+            idx_xs_b = indices[:]
+            if s[i] == 0:
+                xs = y.clone()
+            else:
+                if s[i] > 0:
+                    idx_xs_a[i] = slice(0,-s[i])
+                    idx_xs_b[i] = slice(0,s[i])
+                    idx_x_a[i] = slice(s[i],None)
+                    #idx_x_b[i] = slice(s[i]-1,None,-1) #Pytorch does not 
+                    # support negative steps
+                else:
+                    idx_xs_a[i] = slice(-s[i],None)
+                    idx_xs_b[i] = slice(s[i],None)
+                    idx_x_a[i] = slice(0,s[i])
+                    #idx_x_b[i] = slice(-1,s[i]-1,-1) #Pytorch does not 
+                    # support negative steps
+                
+                xs[tuple(idx_xs_a)] = y[tuple(idx_x_a)]
+                xs[tuple(idx_xs_b)] += reverse(y[tuple(idx_xs_b)],dim = i)
+                #xs[tuple(idx_xs_b)] += y[tuple(idx_x_b)]
+                y = xs.clone()
+        
+    elif bc == 'zero':
+        xs = th.zeros_like(x)        
+        idx_x = indices[:]
+        idx_xs = indices[:]
+        for i in range(x.dim()):
+            if s[i] == 0:
+                continue
+            else:
+                if s[i] < 0: 
+                    idx_x[i] = slice(0,x.shape[i]+s[i])
+                    idx_xs[i] = slice(-s[i],x.shape[i])
+                else: 
+                    idx_x[i] = slice(s[i],x.shape[i])
+                    idx_xs[i] = slice(0,x.shape[i]-s[i])
+        
+        xs[tuple(idx_xs)] = x[tuple(idx_x)]
+        
+    else:
+        raise Exception("Unknown boundary conditions")
+    
+    return xs
+
+def compute_patch_overlap(shape,patchSize,stride=1,padding=0,GPU=False,dtype = 'f'):
+    r""" Returns a tensor whose dimensions are equal to 'shape' and it 
+    indicates how many patches extracted from the image (the patches are of 
+    size patchSize and are extracted using a specified stride) each pixel of 
+    the image contributes. 
+
+    For example below is the array which indicates how many times each pixel
+    at the particular location of an image of size 16 x 16 has been found in 
+    any of the 49 4x4 patches that have been extracted using a stride=2.
+
+    T = 
+     1     1     2     2     2     2     2     2     2     2     2     2     2     2     1     1
+     1     1     2     2     2     2     2     2     2     2     2     2     2     2     1     1
+     2     2     4     4     4     4     4     4     4     4     4     4     4     4     2     2
+     2     2     4     4     4     4     4     4     4     4     4     4     4     4     2     2
+     2     2     4     4     4     4     4     4     4     4     4     4     4     4     2     2
+     2     2     4     4     4     4     4     4     4     4     4     4     4     4     2     2
+     2     2     4     4     4     4     4     4     4     4     4     4     4     4     2     2
+     2     2     4     4     4     4     4     4     4     4     4     4     4     4     2     2
+     2     2     4     4     4     4     4     4     4     4     4     4     4     4     2     2
+     2     2     4     4     4     4     4     4     4     4     4     4     4     4     2     2
+     2     2     4     4     4     4     4     4     4     4     4     4     4     4     2     2
+     2     2     4     4     4     4     4     4     4     4     4     4     4     4     2     2
+     2     2     4     4     4     4     4     4     4     4     4     4     4     4     2     2
+     2     2     4     4     4     4     4     4     4     4     4     4     4     4     2     2
+     1     1     2     2     2     2     2     2     2     2     2     2     2     2     1     1
+     1     1     2     2     2     2     2     2     2     2     2     2     2     2     1     1
+
+
+     Based on this table the pixel at the location (3,2) has been used in 4
+     different patches while the pixel at the location (15,4) has been used in
+     2 different patches."""
+     
+    assert(isinstance(shape,tuple)), "shape is expected to be a tuple."
+    assert(isinstance(patchSize,tuple)), "patchSize is expected to be a tuple."
+    if len(shape) < 4:
+        shape = (1,)*(4-len(shape)) + shape
+    elif len(shape) > 4:
+        shape = shape[0:3]
+    
+    if len(patchSize) < 2:
+        patchSize = patchSize * 2
+    
+    if dtype == 'f' : 
+        dtype = th.FloatTensor
+    elif dtype == 'd' :
+        dtype = th.DoubleTensor
+    else:
+        raise Exception("Supported data types are 'f' (float) and 'd' (double).")
+    
+    
+    shape_ = (shape[0]*shape[1],1,shape[2],shape[3])
+    
+    
+    Pn = reduce(lambda x,y : x*y, patchSize[0:2])
+    h = th.eye(Pn).type(dtype)
+    h = h.view(Pn,1,patchSize[0],patchSize[1])
+    
+    x = th.ones(shape_).type(dtype)
+    
+    if th.cuda.is_available() and GPU:
+        x = x.cuda()
+        h = h.cuda()
+    
+    T = th.conv2d(x,h,stride = stride, padding = padding)
+    T = th.conv_transpose2d(T,h,stride = stride, padding = padding)
+    
+    return T.view(shape)
+
+def formatInput2Tuple(input,typeB,numel,strict = True):
+    assert(isinstance(input,(tuple,typeB))),"input is expected to be of type " \
+        "tuple or of type " + str(typeB)[8:-2] + " but instead an input of "\
+        +"type "+str(type(input))+" was provided."
+    
+    if isinstance(input,typeB):
+        input = (input,)*numel
+    
+    if strict :
+        assert(len(input) == numel), "An input of size "+str(numel)+" is expected "\
+            "but instead input = "+str(input)+ " was provided."
+    else:
+        if len(input) < numel:
+            input = input + (input[-1],)*(numel-len(input))
+        elif len(input) > numel:
+            input = input[0:numel]
+        
+    return tuple(typeB(i) for i in input)
+
+def getPad2RetainShape(kernel_size,dilation = 1):
+    r"""Returns the necessary padding in the format [TOP BOTTOM LEFT RIGHT] 
+    so that the spatial dimensions of the output will remain the same with 
+    the spatial dimensions of the input.
+    Note: This function assumes that the conv2d is computed using stride = 1."""
+    
+    kernel_size = formatInput2Tuple(kernel_size,int,2)
+    dilation = formatInput2Tuple(dilation,int,2)
+    
+    kernel_size = ((kernel_size[0]-1)*dilation[0]+1,(kernel_size[1]-1)*dilation[1]+1)
+    Kc = th.Tensor(kernel_size).add(1).div(2).floor()
+    return (int(Kc[0])-1, kernel_size[0]-int(Kc[0]),\
+                                        int(Kc[1])-1,kernel_size[1]-int(Kc[1]))    
+    
+
+def getPadSize(shape,patchSize,stride):
+    r"""Computes the necessary padding so that an integer
+    number of overlapping patches (of size patchSize) can be extracted from 
+    the image using a specified stride.
+
+    `padsize`:: Specifies the amount of padding of an image  as 
+    [TOP, BOTTOM, LEFT, RIGHT].
+    """
+    assert(isinstance(shape,tuple)), "shape is expected to be a tuple."
+    assert(isinstance(patchSize,tuple)), "patchSize is expected to be a tuple."
+    if len(shape) < 4:
+        shape = (1,)*(4-len(shape)) + shape
+    elif len(shape) > 4:
+        shape = shape[0:3]
+    
+    if len(patchSize) < 2:
+        patchSize = patchSize * 2
+    
+    if isinstance(stride,int):
+        stride = (stride,)*2
+    assert(isinstance(stride,tuple)), "stride is expected to be of type int "\
+    "or of type tuple."
+    
+    shape = np.array(shape[2:4])
+    patchSize = np.array(patchSize[0:2])
+    stride = np.array(stride[0:2])
+    
+    assert(np.any(stride > 0)), "negative stride is not accepted."
+    patchDims = (shape - patchSize)/stride + 1
+    assert(np.any(patchDims > 0)), "The specified size of the patch is "\
+    "greater than the spatial dimensions of the input tensor."
+    
+    usePad = patchDims - np.floor(patchDims)
+    
+    if usePad[0]:
+        padSizeTB = np.floor(patchDims[0])*stride[0] + patchSize[0] - shape[0]
+        padSizeTB = (np.floor(padSizeTB/2),np.ceil(padSizeTB/2))
+    else:
+        padSizeTB = (0,0)
+    
+    if usePad[1]:
+        padSizeLR = np.floor(patchDims[1])*stride[1] + patchSize[1] - shape[1]
+        padSizeLR = (np.floor(padSizeLR/2),np.ceil(padSizeLR/2))
+    else:
+        padSizeLR = (0,0)
+    
+    return tuple(int(i) for i in padSizeTB) + tuple(int(i) for i in padSizeLR)
+
+
+def im2patch(input,patchSize,stride=1) :
+    r""" im2patch extracts all the valid patches from the input which is a 3D 
+    or 4D tensor of size B x C x H x W. The extracted patches are of size 
+    patchSize and they are extracted with an overlap equal to stride. The 
+    output is of size B x C*P x PH x PW where P is the total number of elements
+    in the patch, while PH and PW is the number of patches in the horizontal and
+    vertical axes, respectively.
+    """
+    assert(input.dim() >= 3 and input.dim() < 5), "A 3D or 4D tensor is expected."
+    assert(isinstance(patchSize,tuple)), "patchSize is expected to be a tuple."
+    
+    if len(patchSize) < 2:
+        patchSize  *=  2
+    
+    if input.dim() == 3:
+        input = input.unsqueeze(0)
+        
+    Pn = reduce(lambda x,y : x*y, patchSize[0:2])
+    h = th.eye(Pn).type(input.type())
+    h = h.view(Pn,1,patchSize[0],patchSize[1])
+    
+    batch, Nc = input.shape[0:2] 
+    
+    if Nc != 1:
+        input = input.view(batch*Nc,1,input.shape[2],input.shape[3])
+    
+    P = th.conv2d(input,h,stride = stride)
+    
+    if Nc != 1:
+        P = P.view(batch,Nc*Pn,P.shape[2],P.shape[3])
+    
+    return P
+
+def patch2im(input,shape,patchSize,stride=1) :
+    r""" patch2im is the transpose operation of im2patch.
+    
+    shape : is the size of the original tensor from which the patches where 
+    extracted.
+    """
+    assert(input.dim() == 4), "A 4D tensor is expected."
+    assert(isinstance(patchSize,tuple)), "patchSize is expected to be a tuple."
+    assert(isinstance(patchSize,tuple)), "patchSize is expected to be a tuple."
+    
+    if len(patchSize) < 2:
+        patchSize  *=  2
+    if len(shape) < 4:
+        shape = (1,)*(4-len(shape)) + shape
+    elif len(shape) > 4:
+        shape = shape[0:3]
+
+        
+    Pn = reduce(lambda x,y : x*y, patchSize[0:2])
+    batch = shape[0]
+    Nc = math.floor(input.shape[1]/Pn);
+    if Nc != 1:
+        input = input.view(batch*Nc,input.shape[1]/Nc,input.shape[2],input.shape[3])
+    
+    h = th.eye(Pn).type(input.type())
+    h = h.view(Pn,1,patchSize[0],patchSize[1])
+    
+    out = th.conv_transpose2d(input,h,stride = stride)
+        
+    if Nc != 1:
+        out = out.view(batch,Nc*out.shape[1],out.shape[2],out.shape[3])
+    
+    if reduce(lambda x,y : x or y,[out.shape[i] < shape[i] for i in range(4)]):
+        out = th.nn.functional.pad(out,(0,shape[3]-out.shape[3],0,shape[2]-out.shape[2]))
+    
+    return out
+
+def im2patch_sinv(input,shape,patchSize,stride=1) :
+    r""" im2patch_sinv is the pseudo inverse of im2patch.
+    
+    shape : is the size of the original tensor from which the patches where 
+    extracted.
+    """
+    assert(input.dim() == 4), "A 4D tensor is expected."
+    assert(isinstance(patchSize,tuple)), "patchSize is expected to be a tuple."
+    assert(isinstance(patchSize,tuple)), "patchSize is expected to be a tuple."
+    
+    if len(patchSize) < 2:
+        patchSize  *=  2
+    if len(shape) < 4:
+        shape = (1,)*(4-len(shape)) + shape
+    elif len(shape) > 4:
+        shape = shape[0:3]
+
+        
+    Pn = reduce(lambda x,y : x*y, patchSize[0:2])
+    batch = shape[0]
+    Nc = math.floor(input.shape[1]/Pn);
+    if Nc != 1:
+        input = input.view(batch*Nc,input.shape[1]/Nc,input.shape[2],input.shape[3])
+    
+    h = th.eye(Pn).type(input.type())
+    h = h.view(Pn,1,patchSize[0],patchSize[1])
+    
+    out = th.conv_transpose2d(input,h,stride = stride)
+        
+    if Nc != 1:
+        out = out.view(batch,Nc*out.shape[1],out.shape[2],out.shape[3])
+    
+    D = compute_patch_overlap(shape,patchSize,stride)
+    D = D.type(input.type())
+    out = out.div(D)
+    
+    if reduce(lambda x,y : x or y,[out.shape[i] < shape[i] for i in range(4)]):
+        out = th.nn.functional.pad(out,(0,shape[3]-out.shape[3],0,shape[2]-out.shape[2]))
+    
+    return out
+        
+def odctdict(n,L,dtype = 'f',GPU = False):
+    D = th.zeros(n,L)
+    if dtype == 'f':
+        D = D.float()
+    else:
+        D = D.double()
+    
+    D[:,0] = 1/math.sqrt(n)
+    for k in range(1,L): 
+        v = th.cos(th.arange(0,n)*math.pi*k/L); 
+        v -= v.mean();
+        D[:,k] = v.div(v.norm(p=2))
+    
+    if th.cuda.is_available() and GPU:
+        D = D.cuda()
+    
+    return D
+
+def odctndict(n,L,p = None, dtype = 'f', GPU = False):
+    r"""  D = ODCTNDICT((N1 N2 ... Np),(L1 L2 ... Lp)) returns an overcomplete 
+    DCT dictionary for p-dimensional signals of size N1xN2x...xNp. The number 
+    of DCT atoms in the i-th dimension is Li, so the combined dictionary is of
+    size (N1*N2*...*Np) x (L1*L2*...*Lp).
+
+    D = ODCTNDICT([N1 N2 ... Np],L) specifies the total number of atoms in
+    the dictionary instead of each of the Li's individually. The Li's in
+    this case are selected so their relative sizes are roughly the same as
+    the relative sizes of the Ni's. Note that the actual number of atoms in
+    the dictionary may be larger than L, as rounding might be required for
+    the computation of the Li's.
+
+    D = ODCTNDICT(N,L,P) is shorthand for the call ODCTNDICT(N*ones(1,P),L),
+    and returns the overcomplete DCT dictionary for P-dimensional signals of
+    size NxNx...xN. L is the required size of the overcomplete dictionary,
+    and is rounded up to the nearest integer with a whole P-th root.
+    """
+    assert(isinstance(n,int) or isinstance(n,tuple)), " n should be either of "\
+    "type int or of type tuple."
+    assert(isinstance(L,int) or isinstance(L,tuple)), " L should be either of "\
+    "type int or of type tuple."
+    assert(isinstance(p,int) or p is None), " p should be either of "\
+    "type int or being omitted."
+         
+    n = np.asarray(n)
+    L = np.asarray(L)
+
+    if p is None:
+        p = n.size
+
+    if n.size == 1 :
+        n = n*np.ones((1,p))
+    if L.size == 1 :
+        L = L*np.ones((1,))
+        
+
+    if L.size ==1 and p > 1 :
+        N = np.prod(n)
+        L = np.ceil((L*(np.power(n,p)/N)**(1/(p-1)))**(1/p))
+    
+    n = tuple(int(i) for i in n)
+    L = tuple(int(i) for i in L)
+    
+    D = odctdict(n[0],L[0],dtype,GPU)
+    for i in range(1,p):
+        D = kron(D,odctdict(n[i],L[i],dtype,GPU))
+    
+    return D
+
+def odct2dict(n,L,dtype = 'f', GPU = False):
+    return odctndict(n,L,2,dtype,GPU)
+
+def odct3dict(n,L,dtype = 'f', GPU = False):
+    return odctndict(n,L,3,dtype,GPU)
+
+def kron(x,y):
+    r""" Kronecker tensor product.
+    KRON(X,Y) is the Kronecker tensor product of X and Y.
+    The result is a large matrix formed by taking all possible
+    products between the elements of X and those of Y. For
+    example, if X is 2 by 3, then KRON(X,Y) is
+ 
+       [ X[0,0]*Y  X[0,1]*Y  X[0,2]*Y
+         X[1,0]*Y  X[1,1]*Y  X[1,2]*Y ]
+    """
+    assert(x.dim() == 1 or x.dim() == 2), "x must be either a 1D or 2D tensor."
+    assert(y.dim() == 1 or y.dim() == 2), "x must be either a 1D or 2D tensor."
+    
+    if x.dim() == 1:
+        x = x.unsqueeze(1)
+    if y.dim() == 1:
+        y = y.unsqueeze(1)
+    
+    x_size = x.shape
+    y_size = y.shape
+    
+    x = x.t().contiguous().view(-1)
+    y = y.t().contiguous().view(-1)
+    
+    z = y.ger(x)
+    
+    D = th.tensor().type_as(x)
+    for m in range(0,x_size[1]):
+        d = th.tensor().type_as(x)
+        for k in range(x_size[0]*m,x_size[0]*(m+1)):
+            d = th.cat((d,z[:,k].contiguous().view(y_size[1],y_size[0]).t()),dim=0)
+        if m == 0:
+            D = th.cat((D,d))
+        else:
+            D = th.cat((D,d),dim=1)
+    
+    return D
+
+def sub2ind(shape,*args):
+    r"""Linear index from multiple subscripts.
+    SUB2IND is used to determine the equivalent single index
+    corresponding to a given set of subscript values.
+ 
+    IND = SUB2IND(shape,I,J) returns the linear index equivalent to the
+    row and column subscripts in the arrays I and J for a matrix of
+    size SIZ. 
+ 
+    IND = SUB2IND(shape,I1,I2,...,IN) returns the linear index
+    equivalent to the N subscripts in the arrays I1,I2,...,IN for an
+    array of size SIZ.
+ 
+    I1,I2,...,IN must have the same size, and IND will have the same size
+    as I1,I2,...,IN. For a tensor A, if IND = SUB2IND(A.shape,I1,...,IN),
+    then A.take(IND[k])=A(I1[k],...,IN[k]) for all k.
+    
+    The subscript arguments must be of type np.ndarrays.
+    """
+    for k in args:
+        assert(isinstance(k,np.ndarray)),"All the subscript arguments are "\
+        "expected to be of type 'ndarray'."
+    
+    assert(len(shape) == len(args)), "%d subscript arguments are expected."\
+    %len(shape)
+    
+    s = args[0].shape
+    assert(args[0].min() >= 0 and args[0].max() < shape[0]), "Invalid values for the "\
+    "subscript arguments."
+    for k in range(1,len(args)) :
+        assert(s == args[k].shape),"The dimensions of all the subscript arguments "\
+        "must match."
+        assert(args[k].min() >= 0 and args[k].max() < shape[k]), "Invalid "\
+        "values for the subscript arguments."
+        
+    p = th.LongTensor(np.hstack((np.cumprod(np.array(shape[1:])[-1::-1])[-1::-1],np.array(1))))
+    
+    idx = th.zeros(args[0].shape).long()
+    for k in range(0,len(args)):
+        idx += th.from_numpy(args[k]).long().mul(p[k])
+        
+    return idx
+    
+def meshgrid(shape) :
+    
+    s_ind = list()
+    
+    siz = len(shape)
+    for k in range(0,siz):
+        s_ind.append(np.arange(0,shape[k]))
+        s_ind[k].shape = (1,)*k + (shape[k],) + (1,)*(siz-1-k)
+    
+    for k in range(0,siz):
+        for m in range(0,siz):
+            if k != m :
+                s_ind[k] = s_ind[k].repeat(shape[m],axis = m)
+    
+    return s_ind
+
+def TicTocGenerator():
+    import time
+    # Generator that returns time differences
+    ti = 0           # initial time
+    tf = time.time() # final time
+    while True:
+        ti = tf
+        tf = time.time()
+        yield tf-ti # returns the time difference
+
+TicToc = TicTocGenerator() # create an instance of the TicTocGen generator
+
+# This will be the main function through which we define both tic() and toc()
+def toc(tempBool=True):
+    # Prints the time difference yielded by generator instance TicToc
+    tempTimeInterval = next(TicToc)
+    if tempBool:
+        print( "Elapsed time: %f seconds.\n" %tempTimeInterval )
+
+def tic():
+    # Records a time in TicToc, marks the beginning of a time interval
+    toc(False)  
+
+
+def gen_imdb_BSDS500_fromList(\
+        listPath = "/home/stamatis/Documents/Work/datasets/BSDS500/BSDS_validation_list.txt",\
+        imdbPath = "/home/stamatis/Documents/Work/datasets/BSDS500/gray/",\
+        savePath = None, shape = (128,128),img_ext = '.jpg', dtype = 'f', \
+        train = 0.8, test = 0.2):
+
+
+    def randomCropImg(img,output_shape):
+        input_shape = img.shape[0:2]
+        row_start = np.random.randint(0,input_shape[0]-output_shape[0]+1)
+        col_start = np.random.randint(0,input_shape[1]-output_shape[1]+1)
+        
+        return img[row_start:row_start+output_shape[0]:1,col_start:col_start+output_shape[1]:1,...]    
+    
+    import os
+    from matplotlib import image as Img
+    import numpy as np
+    
+    # read all the images in the dataset
+    l = os.listdir(imdbPath)
+    l = [os.path.join(imdbPath,f) for f in l if f.endswith(img_ext)]
+    N = len(l) # number of images in the dataset
+    
+    # read all the images that should be excluded from the training set
+    f = open(listPath,'r')
+    test_samples = f.readlines(-1); f.close()
+    test_samples = [os.path.join(imdbPath,k.replace('\n','')) for k in test_samples]
+       
+    # images in the dataset excluding the images defined in the list
+    lx = [f for f in l if f not in test_samples]
+
+    train = train/(train+test)
+    test = test/(train+test)
+  
+    Ntrain = int(np.round(N*train)) # number of train images
+    Ntest = N - Ntrain # number of test images
+    
+    assert(Ntest >= len(test_samples)),"The list contains more test samples\
+    than the specified percentage of the total number of available images."
+    
+    l_test = list(np.random.choice(lx,Ntest-len(test_samples),replace = False))
+    test_samples.extend(l_test)
+    train_samples = [f for f in l if f not in test_samples]
+    
+    
+    im_shape = Img.imread(train_samples[0]).shape
+    if len(im_shape) == 2:
+        H,W = im_shape
+        Nchannels = 1
+    else:
+        H,W,Nchannels = im_shape
+    
+    assert(max(shape) <= min(H,W)),"The specified shape is incompatible with "\
+    "the dimensions of the images in the dataset."
+    
+    imdb_train = np.zeros((shape)+(Nchannels,Ntrain),dtype = dtype)
+    for i in range(Ntrain):
+        img = np.array(Img.imread(train_samples[i]),dtype = dtype)
+        if img.ndim == 2:
+            img.shape = img.shape + (1,)
+            
+        imdb_train[...,i] = randomCropImg(img,shape)
+    
+    imdb_test = np.zeros((shape)+(Nchannels,Ntest),dtype = dtype)
+    for i in range(Ntest):
+        img = np.array(Img.imread(test_samples[i]),dtype=dtype)
+        if img.ndim == 2:
+            img.shape = img.shape + (1,)
+            
+        imdb_test[...,i] = randomCropImg(img,shape)        
+    
+    if savePath is not None:
+        np.savez(savePath, train_set = imdb_train, test_set  = imdb_test)        
+    
+    return imdb_train,imdb_test
+    
+    
+#if __name__=="__main__":
+#    
+#    x = th.randn(10,7,120,240).double();
+#    pad = tuple(np.random.randint(0,60,(4)))
+#    
+#    print(pad)
+#    
+#    xp = symmetricPad2D(x,pad)
+#    z = th.randn(xp.size()).double()
+#    zp = symmetricPad_transpose2D(z,pad)
+#    
+#    ip1 = xp.contiguous().view(-1).dot(z.contiguous().view(-1))
+#    ip2= x.contiguous().view(-1).dot(zp.contiguous().view(-1))
+#    
+#    print(ip1,ip2)
+#    print(ip1-ip2)
+    
