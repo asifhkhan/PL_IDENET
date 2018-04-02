@@ -8,14 +8,14 @@ Created on Sun Mar 25 22:50:33 2018
 """
 
 import torch as th
-from . import functional
-from .utils import getPad2RetainShape, formatInput2Tuple
+from .functional import functional as F
+from .. utils import formatInput2Tuple, getPad2RetainShape
 
-pad2D = functional.Pad2D.apply
-pad_transpose2D = functional.Pad_transpose2D.apply
-l2Prox = functional.L2Prox.apply
-weightNormalization = functional.WeightNormalization.apply
-grbf = functional.grbf_LUT.apply
+pad2D = F.Pad2D.apply
+pad_transpose2D = F.Pad_transpose2D.apply
+l2Prox = F.L2Prox.apply
+weightNormalization = F.WeightNormalization.apply
+grbf = F.grbf_LUT.apply
 conv2d = th.nn.functional.conv2d
 conv2d_t = th.nn.functional.conv_transpose2d
 

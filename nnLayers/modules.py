@@ -11,7 +11,7 @@ import torch as th
 from torch import nn
 from . import cascades
 from . import init
-from .utils import formatInput2Tuple, getPad2RetainShape
+from .. utils import formatInput2Tuple, getPad2RetainShape
 #from collections import OrderedDict
 
 #from functools import reduce
@@ -24,9 +24,6 @@ class ResidualRBFLayer(nn.Module):
                  output_features,\
                  rbf_mixtures,\
                  rbf_precision,\
-                 #rbf_start,\
-                 #rbf_end,\
-                 #rbf_step=0.1,\
                  pad = 'same',\
                  convWeightSharing = True,\
                  alpha = True,

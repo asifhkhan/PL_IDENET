@@ -10,7 +10,7 @@ Created on Fri Mar  2 11:33:22 2018
 import torch as th
 #import numpy as np
 import math
-from . import utils
+from ... import utils
 
 
 class WeightNormalization(th.autograd.Function):
