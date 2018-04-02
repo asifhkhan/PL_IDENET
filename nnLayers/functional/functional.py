@@ -19,6 +19,9 @@ class WeightNormalization(th.autograd.Function):
     def forward(ctx,input, alpha = None, normalizedWeights=False,\
                 zeroMeanWeights=False):
         
+        assert(input.dim() == 4), "A 4D input tensor is expected but instead "\
+        +"a tensor of %d dimensions was provided."%input.dim()        
+        
         batch = input.size(0)              
         out = input.clone()
                 

@@ -78,7 +78,7 @@ def residual_grbf_sw(input,net_input,weights,rbf_weights,rbf_centers,\
     #clipping of the values before feeding them to the grbf layer
     out = th.clamp(out,lb,ub)
     # gaussian rbf
-    out = grbf(out,rbf_weights,rbf_precision,data_lut)
+    out = grbf(out,rbf_weights,rbf_centers,rbf_precision,data_lut)
     # conv_tranpose2d
     out = pad_transpose2D(conv2d_t(out,weights,bias = None,stride = 1),pad,padType)
     # Projection of the result, given the input of the network
