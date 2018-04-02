@@ -11,7 +11,7 @@ from torch import nn
 from ...nnLayers import modules
 from ...nnLayers import init
 from ...nnLayers.cascades import nconv2D, nconv_transpose2D
-from ...nnLayers.functional import L2Proj
+from ...nnLayers.functional.functional import L2Proj
 from ...utils import formatInput2Tuple, getPad2RetainShape
 
 class ResDNet(nn.Module):
@@ -91,7 +91,7 @@ class ResDNet(nn.Module):
         self.resPA = nn.ModuleList([modules.ResidualPreActivationLayer(\
                         rpa_kernel_size1,rpa_kernel_size2,output_features,\
                         rpa_output_features,rpa_bias1,rpa_bias2,1,1,\
-                        numparams_prelu1,numparams_prelu2,prelu_init,\
+                        numparams_prelu1,numparams_prelu2,prelu_init,padType,\
                         rpa_scale1,rpa_scale2,rpa_normalizedWeights,\
                         rpa_zeroMeanWeights,rpa_init,self.shortcut[i]) \
                         for i in range(self.rpa_depth)]) 
