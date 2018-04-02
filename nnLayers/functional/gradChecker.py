@@ -52,7 +52,7 @@ def symmetricPad_transpose2D(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False):
     
     x = th.randn(4,3,20,20).type(dtype)
     crop = tuple(np.random.randint(0,10,(4,)))
-    x = functional.symmetricPad2D.apply(x,crop)
+    x = functional.SymmetricPad2D.apply(x,crop)
     
     if GPU and th.cuda.is_available():
         x = x.cuda()
@@ -331,7 +331,7 @@ def weightNormalization(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False,\
 
 def imloss(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False,loss='psnr',peakVal=255):
     
-    imlossF = functional.Imloss.apply
+    imlossF = functional.ImLoss.apply
     
     x = th.randn(4,3,40,40).abs().type(dtype)
     x = x.div(x.max())*peakVal
@@ -399,6 +399,6 @@ def cost_weightNormalization(x,alpha,normalizedWeights,zeroMeanWeights,weights):
     return out.mul(weights).sum()
 
 def cost_imloss(x,y,loss,peakVal):
-    F = functional.Imloss.apply
+    F = functional.ImLoss.apply
     out = F(x,y,peakVal,loss)
     return out

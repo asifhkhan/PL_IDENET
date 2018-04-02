@@ -181,7 +181,7 @@ class ResidualPreActivationLayer(nn.Module):
         self.prelu2_weights = nn.Parameter(th.Tensor(numparams_prelu2).fill_(prelu_init))
     
     def forward(self,input):
-        return cascades.residualPreActivation_prelu(input,self.conv1_weights,\
+        return cascades.residualPreActivation(input,self.conv1_weights,\
                 self.conv2_weights,self.prelu1_weights,self.prelu2_weights,\
                 self.bias1,self.scale1,self.dilation1,self.bias2,self.scale2,\
                 self.dilation2,self.normalizedWeights,self.zeroMeanWeights,\
