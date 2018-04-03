@@ -1352,11 +1352,34 @@ def tic():
     toc(False)  
 
 
+def im2Tensor(img,dtype = th.FloatTensor):
+    assert(isinstance(img,np.ndarray) and img.ndim in (2,3,4)), "A numpy "\
+    "nd array of dimensions 2, 3, or 4 is expected."
+    
+    if img.ndim == 2:
+        return th.from_numpy(img).unsqueeze_(0).unsqueeze_(0).type(dtype)
+    elif img.ndim == 3:
+        return th.from_numpy(img.transpose(2,0,1)).unsqueeze_(0).type(dtype)
+    else:
+        return th.from_numpy(img.transpose((3,2,0,1))).type(dtype)    
+
+def tensor2Im(img,dtype = np.float32):
+    assert(isinstance(img,th.Tensor) and img.ndimension() == 4), "A 4D "\
+    "torch.Tensor is expected."
+    if img.size(0) == 1:
+        img = img.squeeze(0)
+        fshape = (1,2,0)
+    else:
+        fshape = (0,2,3,1)
+    
+    return img.numpy().transpose(fshape).astype(dtype)
+    
+
 def gen_imdb_BSDS500_fromList(\
         listPath = "/home/stamatis/Documents/Work/datasets/BSDS500/BSDS_validation_list.txt",\
-        imdbPath = "/home/stamatis/Documents/Work/datasets/BSDS500/gray/",\
-        savePath = None, shape = (128,128),img_ext = '.jpg', dtype = 'f', \
-        train = 0.8, test = 0.2):
+        imdbPath = "/home/stamatis/Documents/Work/datasets/BSDS500/",\
+        color = True, savePath = None, shape = (128,128),img_ext = '.jpg', \
+        dtype = 'f', train = 0.8, test = 0.2, data = 'both'):
 
 
     def randomCropImg(img,output_shape):
@@ -1371,6 +1394,11 @@ def gen_imdb_BSDS500_fromList(\
     import numpy as np
     
     # read all the images in the dataset
+    if color:
+        imdbPath =  os.path.join(imdbPath,'color')
+    else:
+        imdbPath = os.path.join(imdbPath,'gray')
+    
     l = os.listdir(imdbPath)
     l = [os.path.join(imdbPath,f) for f in l if f.endswith(img_ext)]
     N = len(l) # number of images in the dataset
@@ -1426,7 +1454,12 @@ def gen_imdb_BSDS500_fromList(\
     if savePath is not None:
         np.savez(savePath, train_set = imdb_train, test_set  = imdb_test)        
     
-    return imdb_train,imdb_test
+    if data == 'both':
+        return imdb_train,imdb_test
+    elif data == 'train':
+        return imdb_train
+    elif data == 'test':
+        return imdb_test
     
     
 #if __name__=="__main__":
