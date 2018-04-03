@@ -1257,9 +1257,9 @@ def kron(x,y):
     
     z = y.ger(x)
     
-    D = th.tensor().type_as(x)
+    D = th.Tensor().type_as(x)
     for m in range(0,x_size[1]):
-        d = th.tensor().type_as(x)
+        d = th.Tensor().type_as(x)
         for k in range(x_size[0]*m,x_size[0]*(m+1)):
             d = th.cat((d,z[:,k].contiguous().view(y_size[1],y_size[0]).t()),dim=0)
         if m == 0:
@@ -1374,6 +1374,11 @@ def tensor2Im(img,dtype = np.float32):
     
     return img.numpy().transpose(fshape).astype(dtype)
     
+def imnormalize(input):
+    out = input - input.min()
+    out = out/out.max()
+    return out
+
 
 def gen_imdb_BSDS500_fromList(\
         listPath = "/home/stamatis/Documents/Work/datasets/BSDS500/BSDS_validation_list.txt",\

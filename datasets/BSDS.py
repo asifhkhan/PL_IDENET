@@ -38,7 +38,11 @@ class BSDS(data.Dataset):
                 f = np.load(filepath)
                 self.train_gt = f['train_set'].transpose(fshape)
             else:
+                currentPath = os.path.dirname(os.path.realpath(__file__))
+                listPath = os.path.join(currentPath,"../../datasets/BSDS500/BSDS_validation_list.txt")
+                imdbPath = os.path.join(currentPath,"../../datasets/BSDS500/")
                 self.train_gt = gen_imdb_BSDS500_fromList(color=color,\
+                                    listPath = listPath, imdbPath = imdbPath,\
                                     shape=shape,data ='train').transpose(fshape)
             
             self.train_data = self.generate_NoisyData()
@@ -47,7 +51,11 @@ class BSDS(data.Dataset):
                 f = np.load(filepath)
                 self.test_gt = f['test_set'].transpose(fshape)
             else:
+                currentPath = os.path.dirname(os.path.realpath(__file__))
+                listPath = os.path.join(currentPath,"../../../datasets/BSDS500/BSDS_validation_list.txt")
+                imdbPath = os.path.join(currentPath,"../../../datasets/BSDS500/")
                 self.test_gt = gen_imdb_BSDS500_fromList(color=color,\
+                                    listPath = listPath, imdbPath = imdbPath,\
                                     shape=shape,data ='test').transpose(fshape)
             
             self.test_data = self.generate_NoisyData()
