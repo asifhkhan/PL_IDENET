@@ -1,24 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Apr  4 22:32:58 2018
+Created on Thu Apr  5 17:36:31 2018
 
 @author: Stamatis Lefkimmiatis
-@email : s.lefkimmatis@skoltech.ru
+@email : s.lefkimmiatis@skoltech.ru
 """
-
 import argparse
-from net import UDNet
-
-#import os.path
-import torch as th
-import torch.nn as nn
-import torch.optim as optim
-from torch.autograd import Variable
-from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import MultiStepLR
-from ... datasets.BSDS import BSDS
-from math import log10
 
 
 def tupleOfInts(s):   
@@ -42,6 +30,7 @@ def tupleOfFloats(s):
     else:
         s = float(s)
     return s
+
 
 def tupleOfIntsorString(s):   
     if s == "same":
@@ -98,81 +87,9 @@ opt = parser.parse_args()
 
 print(opt)
 
-input_channels = 3 if opt.color else 1
-output_features = opt.num_filters
 
-if opt.cuda and not th.cuda.is_available():
-    raise Exception("No GPU found, please run without --cuda")
-
-th.manual_seed(opt.seed)
-if opt.cuda:
-    th.cuda.manual_seed(opt.seed)
-
-print('===> Loading datasets')
-train_set = BSDS(opt.stdn,random_seed=opt.data_seed,filepath=opt.imdbPath,train=True,color=opt.color,shape=(180,180),im2Tensor=True)
-test_set = BSDS(opt.stdn,random_seed=opt.data_seed,filepath=opt.imdbPath,train=False,color=opt.color,shape=(180,180),im2Tensor=True)
-training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize, shuffle=True)
-testing_data_loader = DataLoader(dataset=test_set, num_workers=opt.threads, batch_size=opt.testBatchSize, shuffle=False)
-
-print('===> Building model')
-model = UDNet(opt.kernel_size,input_channels,output_features,opt.rbf_mixtures,\
-             opt.rbf_precision,opt.stages,opt.pad,opt.padType,opt.convWeightSharing,\
-             opt.scale_f,opt.scale_t,opt.normalizedWeights,opt.zeroMeanWeights,\
-             opt.rbf_start,opt.rbf_end,opt.data_min,opt.data_max,opt.data_step,\
-             opt.alpha,opt.clb,opt.cub)
-
-criterion = nn.MSELoss(size_average=True,reduce=True)
-
-if opt.cuda:
-    model = model.cuda()
-    criterion = criterion.cuda()
-
-optimizer = optim.Adam(model.parameters(), lr=opt.lr, betas=(0.9, 0.999), eps=1e-04)
-scheduler = MultiStepLR(optimizer,opt.lr_milestones,gamma=opt.lr_gamma)
-
-def train(epoch):
-    scheduler.step()
-    epoch_loss = 0
-    for iteration, batch in enumerate(training_data_loader, 1):
-        input, target, sigma = Variable(batch[0]), Variable(batch[1]), Variable(batch[2])
-        if opt.cuda:
-            input = input.cuda()
-            target = target.cuda()
-            sigma = sigma.cuda()
-
-        optimizer.zero_grad()
-        loss = criterion(model(input,sigma), target)
-        epoch_loss += loss.data[0]
-        loss.backward()
-        optimizer.step()
-
-        print("===> Epoch[{}]({}/{}): PSNR: {:.4f} dB".format(epoch, iteration, len(training_data_loader),10*log10(opt.cub**2/loss.data[0])))
-
-    print("===> Epoch {} Complete: Avg. PSNR: {:.4f} dB".format(epoch, 10*log10(opt.cub**2/(epoch_loss / len(training_data_loader)))))
-
-
-def test():
-    avg_psnr = 0
-    for batch in testing_data_loader:
-        input, target, sigma = Variable(batch[0]), Variable(batch[1]), Variable(batch[2])
-        if opt.cuda:
-            input = input.cuda()
-            target = target.cuda()
-            sigma = sigma.cuda()
-
-        prediction = model(input,sigma)
-        mse = criterion(prediction, target)
-        psnr = 10 * log10(opt.cub**2 / mse.data[0])
-        avg_psnr += psnr
-    print("===> Avg. PSNR: {:.4f} dB".format(avg_psnr / len(testing_data_loader)))
-
-
-def checkpoint(epoch):
-    model_out_path = "model_epoch_{}.pth".format(epoch)
-    th.save(model, model_out_path)
-    print("Checkpoint saved to {}".format(model_out_path))
-
-for epoch in range(1, opt.nEpochs + 1):
-    train(epoch)
-    test()
-    checkpoint(epoch)
+#class Namespace:
+#    def __init__(self, **kwargs):
+#        self.__dict__.update(kwargs)
+#
+#opt = 

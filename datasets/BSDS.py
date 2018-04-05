@@ -20,11 +20,12 @@ class BSDS(data.Dataset):
         assert(isinstance(stdn,(int,tuple))),"stdn is expected to be either "\
         +"an int or a tuple"
                 
-        if isinstance(stdn,int):
-            self.stdn = (stdn,)
+        if isinstance(stdn,float):
+            stdn = (stdn,)
         if isinstance(stdn,tuple):
-            self.stdn = tuple(int(i) for i in stdn)
+            stdn = tuple(float(i) for i in stdn)
         
+        self.stdn = np.asarray(stdn) 
         self.train = train
         self.rng = np.random.RandomState(random_seed)
         
@@ -72,11 +73,11 @@ class BSDS(data.Dataset):
         if self.train:
             img, target, noise_std = self.train_data[index],\
                                      self.train_gt[index%len(self.train_gt)],\
-                                     self.stdn[index//len(self.train_gt)]
+                                     self.stdn.astype(self.train_gt.dtype)[index//len(self.train_gt)]
         else:
             img, target, noise_std = self.test_data[index],\
                                      self.test_gt[index%len(self.stdn)],\
-                                     self.stdn[index//len(self.test_gt)]
+                                     self.stdn.astype(self.test_gt.dtype)[index//len(self.test_gt)]
         
         return img,target,noise_std
     

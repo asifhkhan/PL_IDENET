@@ -54,7 +54,7 @@ class UDNet(nn.Module):
             net_input = input
             
         for m in self.resRBF:
-            input = m(input,stdn,self.rbf_data_lut,net_input)
+            input = m(input,stdn,self.rbf_data_lut.type_as(input),net_input)
         
         return self.bbProj(input)
 

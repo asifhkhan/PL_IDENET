@@ -634,6 +634,7 @@ class grbf_LUT(th.autograd.Function):
         assert(data_lut.size(1) == centers.numel()), "dimensions mismatch "\
         "between data_lut and rbf centers."
         
+        
         # *** Prepare the look-up table ***
         
         # data_lut is a 2D tensor of nbins x centers. Suppose that we are 
