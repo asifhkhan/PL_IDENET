@@ -1381,8 +1381,8 @@ def imnormalize(input):
 
 
 def gen_imdb_BSDS500_fromList(\
-        listPath = "/home/stamatis/Documents/Work/datasets/BSDS500/BSDS_validation_list.txt",\
-        imdbPath = "/home/stamatis/Documents/Work/datasets/BSDS500/",\
+        listPath = "/home/stamatis/Documents/Work/repos/datasets/BSDS500/BSDS_validation_list.txt",\
+        imdbPath = "/home/stamatis/Documents/Work/repos/datasets/BSDS500/",\
         color = True, savePath = None, shape = (128,128),img_ext = '.jpg', \
         dtype = 'f', train = 0.8, test = 0.2, data = 'both'):
 

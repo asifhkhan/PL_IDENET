@@ -19,34 +19,34 @@ class UDNet(nn.Module):
                  rbf_mixtures,\
                  rbf_precision,\
                  stages = 5,\
-                 rbf_start = -100,\
-                 rbf_end = 100,\
-                 rbf_step = 0.1,\
-                 clb = 0,\
-                 cub = 255,\
                  pad = 'same',\
-                 convWeightSharing = True,\
-                 alpha = True,\
-                 lb = -100,\
-                 ub = 100,\
                  padType = 'symmetric',\
+                 convWeightSharing = True,\
                  scale_f = True,\
                  scale_t = True,\
                  normalizedWeights = True,\
-                 zeroMeanWeights = True):
-
+                 zeroMeanWeights = True,\
+                 rbf_start = -100,\
+                 rbf_end = 100,\
+                 data_min = -100,\
+                 data_max = 100,\
+                 data_step = 0.1,\
+                 alpha = True,\
+                 clb = 0,\
+                 cub = 255):
+        
         super(UDNet, self).__init__()
         
-        rbf_centers = th.linspace(lb,ub,rbf_mixtures).type_as(th.Tensor())       
-        self.rbf_data_lut = init.rbf_lut(rbf_centers,rbf_precision,rbf_start,\
-                                         rbf_end,rbf_step)
+        rbf_centers = th.linspace(rbf_start,rbf_end,rbf_mixtures).type_as(th.Tensor())       
+        self.rbf_data_lut = init.rbf_lut(rbf_centers,rbf_precision,data_min,\
+                                         data_max,data_step)
         self.stages = stages        
         
         self.resRBF = nn.ModuleList([modules.ResidualRBFLayer(kernel_size,\
                     input_channels,output_features,rbf_mixtures,\
-                    rbf_precision,pad,convWeightSharing,alpha,lb,ub,padType,\
-                    scale_f,scale_t,normalizedWeights,zeroMeanWeights) \
-                    for i in range(self.stages)])        
+                    rbf_precision,pad,convWeightSharing,alpha,rbf_start,\
+                    rbf_end,padType,scale_f,scale_t,normalizedWeights,\
+                    zeroMeanWeights) for i in range(self.stages)])        
         self.bbProj = nn.Hardtanh(min_val = clb, max_val = cub)
         
     def forward(self,input,stdn,net_input = None):

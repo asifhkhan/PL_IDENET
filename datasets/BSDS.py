@@ -52,8 +52,8 @@ class BSDS(data.Dataset):
                 self.test_gt = f['test_set'].transpose(fshape)
             else:
                 currentPath = os.path.dirname(os.path.realpath(__file__))
-                listPath = os.path.join(currentPath,"../../../datasets/BSDS500/BSDS_validation_list.txt")
-                imdbPath = os.path.join(currentPath,"../../../datasets/BSDS500/")
+                listPath = os.path.join(currentPath,"../../datasets/BSDS500/BSDS_validation_list.txt")
+                imdbPath = os.path.join(currentPath,"../../datasets/BSDS500/")
                 self.test_gt = gen_imdb_BSDS500_fromList(color=color,\
                                     listPath = listPath, imdbPath = imdbPath,\
                                     shape=shape,data ='test').transpose(fshape)
