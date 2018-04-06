@@ -50,6 +50,105 @@ class ResidualRBFLayer(nn.Module):
         self.padType = padType
         self.normalizedWeights = normalizedWeights
         self.zeroMeanWeights = zeroMeanWeights
+        self.convWeightSharing = convWeightSharing
+        self.lb = lb
+        self.ub = ub
+        
+        # Initialize conv weights
+        shape = (output_features,input_channels)+kernel_size
+        self.conv_weights = nn.Parameter(th.Tensor(th.Size(shape)))
+        init.dct(self.conv_weights)
+        
+        if not self.convWeightSharing:
+            self.convt_weights = nn.Parameter(th.Tensor(th.Size(shape)))
+            init.dct(self.convt_weights)
+        
+        # Initialize the scaling coefficients for the conv weight normalization
+        if scale_f and normalizedWeights:
+            self.scale_f = nn.Parameter(th.Tensor(output_features).fill_(1))
+        else:
+            self.register_parameter('scale_f', None)
+        
+        if not convWeightSharing:
+            if scale_t and normalizedWeights:
+                self.scale_t = nn.Parameter(th.Tensor(output_features).fill_(1))
+            else :
+                self.register_parameter('scale_t', None)
+        
+        # Initialize the params for the proxL2
+        if alpha :
+            self.alpha_prox = nn.Parameter(th.Tensor(1).fill_(0))
+        else:
+            self.register_parameter('alpha_prox', None)
+        
+        # Initialize the rbf_weights
+        self.rbf_weights = nn.Parameter(th.Tensor(output_features,rbf_mixtures).fill_(1e-4))
+        self.rbf_centers = th.linspace(lb,ub,rbf_mixtures).type_as(self.rbf_weights)
+        self.rbf_precision = rbf_precision
+        #self.rbf_data = init.rbf_lut(self.rbf_centers,self.rbf_precision,rbf_start,rbf_end,rbf_step).type_as(self.rbf_weights)
+        
+    def forward(self,input,stdn,rbf_data,net_input = None):
+        if net_input is None:
+            # If input is a variable with require_grad = True, then net_input 
+            # will be a variable with require_grad = False. 
+            # net_input = input.data.clone() 
+            net_input = input
+        if self.convWeightSharing:
+            return cascades.residualDenoise_grbf_sw(input,net_input,\
+                    self.conv_weights,self.rbf_weights,self.rbf_centers,\
+                    self.rbf_precision,rbf_data,self.alpha_prox,stdn,self.pad,\
+                    self.padType,self.scale_f,self.normalizedWeights,\
+                    self.zeroMeanWeights,self.lb,self.ub)
+        else:
+            return cascades.residualDenoise_grbf(input,net_input,self.conv_weights,\
+                    self.convt_weights,self.rbf_weights,self.rbf_centers,\
+                    self.rbf_precision,rbf_data,self.alpha_prox,stdn,self.pad,\
+                    self.padType,self.scale_f,self.scale_t,self.normalizedWeights,\
+                    self.zeroMeanWeights,self.lb,self.ub)
+    
+    def __repr__(self):
+        return self.__class__.__name__ + '(' \
+            + 'kernel_size = ' + str(tuple(self.conv_weights.shape[2:])) \
+            + ', input_channels = ' + str(self.conv_weights.shape[1]) \
+            + ', output_features = ' + str(self.conv_weights.shape[0]) \
+            + ', rbf_mixtures = ' + str(self.rbf_centers.numel()) \
+            + ', normalizedWeights = ' + str(self.normalizedWeights) \
+            + ', zeroMeanWeights = ' + str(self.zeroMeanWeights) \
+            + ', convWeightSharing = ' + str(self.convWeightSharing) + ')'
+
+class ResidualRBFLayer_old(nn.Module):
+    
+    def __init__(self, kernel_size,\
+                 input_channels,\
+                 output_features,\
+                 rbf_mixtures,\
+                 rbf_precision,\
+                 pad = 'same',\
+                 convWeightSharing = True,\
+                 alpha = True,
+                 lb = -100,\
+                 ub = 100,\
+                 padType = 'symmetric',\
+                 scale_f = True,\
+                 scale_t = True,\
+                 normalizedWeights = True,\
+                 zeroMeanWeights = True):
+        
+        super(ResidualRBFLayer, self).__init__()
+        
+        kernel_size = formatInput2Tuple(kernel_size,int,2)       
+        
+        if isinstance(pad,str) and pad == 'same':
+            pad = getPad2RetainShape(kernel_size)
+#            # center of the kernel
+#            Kc = th.Tensor(kernel_size).add(1).div(2).floor()
+#            pad = (int(Kc[0])-1, kernel_size[0]-int(Kc[0]),\
+#                   int(Kc[1])-1,kernel_size[1]-int(Kc[1]))
+            
+        self.pad = formatInput2Tuple(pad,int,4)
+        self.padType = padType
+        self.normalizedWeights = normalizedWeights
+        self.zeroMeanWeights = zeroMeanWeights
         self.lb = lb
         self.ub = ub
         
@@ -111,8 +210,7 @@ class ResidualRBFLayer(nn.Module):
             + ', normalizedWeights = ' + str(self.normalizedWeights) \
             + ', zeroMeanWeights = ' + str(self.zeroMeanWeights) \
             + ', convWeightSharing = ' + str(self.conv_weights is self.convt_weights) + ')'
-
-
+        
 class ResidualPreActivationLayer(nn.Module):
     
     def __init__(self, kernel1_size,\

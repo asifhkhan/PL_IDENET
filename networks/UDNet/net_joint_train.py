@@ -8,40 +8,43 @@ Created on Wed Apr  4 22:32:58 2018
 """
 
 import argparse
-from net import UDNet
+from .net import UDNet
+from ...datasets.BSDS import BSDS
+from pydl.utils import formatInput2Tuple
 
-#import os.path
+import os.path
 import torch as th
 import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
-from ... datasets.BSDS import BSDS
 from math import log10
+from re import match as pattern_match
 
+def findLastCheckpoint(expDir):
+    """Finds the latest checkpoint."""
+    lfiles = os.listdir(expDir)
+    lfiles = [i for i in lfiles if pattern_match('model_epoch',i)]
+    if len(lfiles) == 0 or (len(lfiles) == 1 and lfiles[0].split('epoch_')[-1].split('.')[0] == 'best'):
+        return 0
+    else:
+        lfiles = [lfiles[i].split('epoch_')[-1].split('.')[0] for i in range(len(lfiles))]
+        return max(int(i) for i in lfiles if i != 'best')
 
-def tupleOfInts(s):   
+def tupleOfData(s,dtype):   
     if s.find('(',0,1) > -1: # If the first character of the string is '(' then
         # this is a tuple and we keep only the substring with the values 
         # separated by commas, i.e., s[1:-1]. Then we create a list that holds
         # the characters which corresponds to the entries of the tuple by using
         # s[1:-1].split(',')
-        s = tuple(int(i) for i in s[1:-1].split(','))
+        s = tuple(dtype(i) for i in s[1:-1].replace(" ","").split(',') if i!="")
     else:
-        s = int(s)
+        s = dtype(s)
     return s
 
-def tupleOfFloats(s):   
-    if s.find('(',0,1) > -1: # If the first character of the string is '(' then
-        # this is a tuple and we keep only the substring with the values 
-        # separated by commas, i.e., s[1:-1]. Then we create a list that holds
-        # the characters which corresponds to the entries of the tuple by using
-        # s[1:-1].split(',')
-        s = tuple(float(i) for i in s[1:-1].split(','))
-    else:
-        s = float(s)
-    return s
+tupleOfInts = lambda s: tupleOfData(s,int)
+tupleOfFloats = lambda s: tupleOfData(s,float)
 
 def tupleOfIntsorString(s):   
     if s == "same":
@@ -85,18 +88,61 @@ parser.add_argument('--batchSize', type = int, default = 64, help='training batc
 parser.add_argument('--testBatchSize', type = int, default = 100, help='testing batch size.')
 parser.add_argument('--nEpochs', type = int, default = 100, help='number of epochs to train for.')
 parser.add_argument('--lr', type = float, default = 1e-3, help='learning rate. Default=1e-3.')
-parser.add_argument('--lr_milestones', type = int, nargs = '+', default = [100], help="Scheduler's learning rate milestones. Default=[100].")
+parser.add_argument('--lr_milestones', type = tupleOfInts, default = 100, help="Scheduler's learning rate milestones. Default=[100].")
 parser.add_argument('--lr_gamma', type = float, default = 0.1, help="multiplicative factor of learning rate decay.")
 parser.add_argument('--cuda', action='store_true', help='use cuda?')
 parser.add_argument('--threads', type = int, default = 4, help='number of threads for data loader to use.')
 parser.add_argument('--seed', type = int, default = 123, help='random seed to use. Default=123.')
 parser.add_argument('--stdn', type = tupleOfFloats, default='(5,9,13,17,21,25,29)', help=" Number of noise levels (standard deviation) for which the network will be trained.")
+parser.add_argument('--saveFreq', type = int, default = 10, help='Every how many epochs we save the model parameters.')
+parser.add_argument('--saveBest', action='store_true', help='save the best model parameters?')
+parser.add_argument('--xid', type = str, default = '', help='Identifier for the current experiment')
+parser.add_argument('--resume', action='store_true', help='resume training?')
 # DataSet Parameters
 parser.add_argument('--imdbPath', type = str, default = '', help='location of the dataset.')
 parser.add_argument('--data_seed', type = int, default = 20180102, help='random seed for data generation. Default=20180102')
+
 opt = parser.parse_args()
 
+print('========= Selected training parameters and model architecture =============')
 print(opt)
+print('===========================================================================')
+print('\n')
+
+if isinstance(opt.lr_milestones,tuple): 
+    opt.lr_milestones = list(opt.lr_milestones)
+else:
+    opt.lr_milestones = [opt.lr_milestones]
+if opt.convWeightSharing:
+    str_ws = '-WS'
+else:
+    str_ws = '-NoWS'
+
+if opt.color:
+    strc = 'color'
+else:
+    strc ='gray'
+
+opt.kernel_size = formatInput2Tuple(opt.kernel_size,int,2)
+
+if isinstance(opt.stdn,tuple) and len(opt.stdn) == 1:
+    stdn = opt.stdn[0]
+else:
+    stdn = opt.stdn
+    
+if opt.xid == '':
+    opt.xid = 'UDNet'
+else:
+    opt.xid = 'UDNet_'+opt.xid
+
+dirname = "{}_{}_stages:{}_kernel:{}x{}_filters:{}{}_stdn:{}".format(opt.xid,\
+                 strc,opt.stages,opt.kernel_size[0],opt.kernel_size[1],\
+                 opt.num_filters,str_ws,stdn)
+
+currentPath = os.path.dirname(os.path.realpath(__file__))
+#currentPath = os.path.dirname(os.path.realpath('pydl/networks/UDNet/net_joint_train.py'))
+dirPath = os.path.join(currentPath,'Results',dirname)
+os.makedirs(dirPath,exist_ok = True)
 
 input_channels = 3 if opt.color else 1
 output_features = opt.num_filters
@@ -114,20 +160,56 @@ test_set = BSDS(opt.stdn,random_seed=opt.data_seed,filepath=opt.imdbPath,train=F
 training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize, shuffle=True)
 testing_data_loader = DataLoader(dataset=test_set, num_workers=opt.threads, batch_size=opt.testBatchSize, shuffle=False)
 
+
 print('===> Building model')
 model = UDNet(opt.kernel_size,input_channels,output_features,opt.rbf_mixtures,\
-             opt.rbf_precision,opt.stages,opt.pad,opt.padType,opt.convWeightSharing,\
-             opt.scale_f,opt.scale_t,opt.normalizedWeights,opt.zeroMeanWeights,\
-             opt.rbf_start,opt.rbf_end,opt.data_min,opt.data_max,opt.data_step,\
-             opt.alpha,opt.clb,opt.cub)
-
+            opt.rbf_precision,opt.stages,opt.pad,opt.padType,opt.convWeightSharing,\
+            opt.scale_f,opt.scale_t,opt.normalizedWeights,opt.zeroMeanWeights,\
+            opt.rbf_start,opt.rbf_end,opt.data_min,opt.data_max,opt.data_step,\
+            opt.alpha,opt.clb,opt.cub)
 criterion = nn.MSELoss(size_average=True,reduce=True)
 
-if opt.cuda:
+optimizer = optim.Adam(model.parameters(), lr=opt.lr, betas=(0.9, 0.999), eps=1e-04)
+
+if opt.cuda :
     model = model.cuda()
     criterion = criterion.cuda()
 
-optimizer = optim.Adam(model.parameters(), lr=opt.lr, betas=(0.9, 0.999), eps=1e-04)
+
+start = 0
+if opt.resume :
+    if opt.saveBest :
+        loadPath = os.path.join(dirPath, "model_epoch_best.pth")
+        loadPath = loadPath if os.path.isfile(loadPath) else ''
+        if loadPath != '':
+            msg = "{} :: Resuming by loading the best model.".format(dirname)
+            print('===>'+msg)
+        elif findLastCheckpoint(dirPath) > 0 :
+            start = findLastCheckpoint(dirPath)
+            msg = "{} :: Resuming by loading epoch {}".format(dirname,start)
+            print('===>'+msg)
+            loadPath = os.path.join(dirPath, "model_epoch_{}.pth".format(start))            
+    elif findLastCheckpoint(dirPath) > 0 :
+        start = findLastCheckpoint(dirPath)
+        msg = "{} :: Resuming by loading epoch {}".format(dirname,start)
+        print('===>'+msg)
+        loadPath = os.path.join(dirPath, "model_epoch_{}.pth".format(start))
+    else:
+        loadPath = ''
+        
+    if loadPath == '':
+        print('===> No saved model to resume from.')
+    else:
+        if opt.cuda:
+            state = th.load(loadPath)
+        else:
+            state = th.load(loadPath,map_location=lambda storage,loc:storage)
+    
+        model.load_state_dict(state['model_state_dict'])
+        optimizer.load_state_dict(state['optimizer_state_dict'])    
+        th.set_rng_state(state['rng_state'])
+        if start == 0 : start = state['epoch'] 
+
 scheduler = MultiStepLR(optimizer,opt.lr_milestones,gamma=opt.lr_gamma)
 
 def train(epoch):
@@ -142,13 +224,14 @@ def train(epoch):
 
         optimizer.zero_grad()
         loss = criterion(model(input,sigma), target)
-        epoch_loss += loss.data[0]
+        epoch_loss += loss.item()
         loss.backward()
         optimizer.step()
 
-        print("===> Epoch[{}]({}/{}): PSNR: {:.4f} dB".format(epoch, iteration, len(training_data_loader),10*log10(opt.cub**2/loss.data[0])))
+        print("===> train:: Epoch[{}]({}/{}): PSNR: {:.4f} dB".format(epoch, iteration, len(training_data_loader),10*log10(opt.cub**2/loss.item())))
 
-    print("===> Epoch {} Complete: Avg. PSNR: {:.4f} dB".format(epoch, 10*log10(opt.cub**2/(epoch_loss / len(training_data_loader)))))
+    print("===> train:: Epoch {} Complete: Avg. PSNR: {:.4f} dB".format(epoch, 10*log10(opt.cub**2/(epoch_loss / len(training_data_loader)))))
+    return epoch_loss
 
 
 def test():
@@ -162,17 +245,38 @@ def test():
 
         prediction = model(input,sigma)
         mse = criterion(prediction, target)
-        psnr = 10 * log10(opt.cub**2 / mse.data[0])
+        psnr = 10 * log10(opt.cub**2 / mse.item())
         avg_psnr += psnr
-    print("===> Avg. PSNR: {:.4f} dB".format(avg_psnr / len(testing_data_loader)))
+    print("===> val:: Avg. PSNR: {:.4f} dB".format(avg_psnr / len(testing_data_loader)))
 
 
-def checkpoint(epoch):
-    model_out_path = "model_epoch_{}.pth".format(epoch)
-    th.save(model, model_out_path)
-    print("Checkpoint saved to {}".format(model_out_path))
+def save_checkpoint(state):    
+    if opt.saveBest:
+        savePath = os.path.join(dirPath, "model_epoch_best.pth")
+    else:
+        savePath = os.path.join(dirPath, "model_epoch_{}.pth".format(state['epoch']))
+    th.save(state, savePath)
+    print("Checkpoint saved to {}".format(savePath))
 
-for epoch in range(1, opt.nEpochs + 1):
-    train(epoch)
+
+epoch_loss = float('inf')
+for epoch in range(start+1, opt.nEpochs + 1):
+    if opt.saveBest:
+        epoch_loss_new = train(epoch)
+    else:
+        train(epoch)        
     test()
-    checkpoint(epoch)
+    if not epoch%opt.saveFreq :
+        if opt.saveBest and epoch_loss_new < epoch_loss:
+            epoch_loss = epoch_loss_new    
+            state = {'epoch':epoch, 'model_state_dict':model.state_dict(),\
+                 'optimizer_state_dict':optimizer.state_dict(),\
+                 'rng_state':th.get_rng_state()}
+            save_checkpoint(state)
+        elif not opt.saveBest:
+            state = {'epoch':epoch, 'model_state_dict':model.state_dict(),\
+                 'optimizer_state_dict':optimizer.state_dict(),\
+                 'rng_state':th.get_rng_state()}
+            save_checkpoint(state)
+            
+print("\n ============ Training completed ======================\n")

@@ -17,8 +17,8 @@ class BSDS(data.Dataset):
     def __init__(self,stdn,random_seed=20180102,filepath='',train=True,\
                  color=False,shape=(180,180),im2Tensor = True):
         
-        assert(isinstance(stdn,(int,tuple))),"stdn is expected to be either "\
-        +"an int or a tuple"
+        assert(isinstance(stdn,(float,tuple))),"stdn is expected to be either "\
+        +"a float or a tuple"
                 
         if isinstance(stdn,float):
             stdn = (stdn,)
@@ -76,7 +76,7 @@ class BSDS(data.Dataset):
                                      self.stdn.astype(self.train_gt.dtype)[index//len(self.train_gt)]
         else:
             img, target, noise_std = self.test_data[index],\
-                                     self.test_gt[index%len(self.stdn)],\
+                                     self.test_gt[index%len(self.test_gt)],\
                                      self.stdn.astype(self.test_gt.dtype)[index//len(self.test_gt)]
         
         return img,target,noise_std

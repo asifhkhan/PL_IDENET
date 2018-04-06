@@ -63,29 +63,6 @@ def nconv_transpose2D(input,weights,bias=None,stride=1,pad=0,padType='zero',\
         
     return out
 
-def residual_grbf_sw(input,net_input,weights,rbf_weights,rbf_centers,\
-                  rbf_precision,data_lut,alpha_prox,stdn,pad=0,\
-                  padType='zero',alpha=None,normalizedWeights=False,\
-                  zeroMeanWeights=False,lb=-100,ub=100):
-    r""" residual layer with shared weights between the convolutional and 
-    transpose convolutional layers."""
-    
-    if (normalizedWeights and alpha is not None) or zeroMeanWeights:
-        weights = weightNormalization(weights,alpha,normalizedWeights,zeroMeanWeights)
-    
-    # conv2d
-    out = conv2d(pad2D(input,pad,padType),weights,bias = None,stride = 1)
-    #clipping of the values before feeding them to the grbf layer
-    out = th.clamp(out,lb,ub)
-    # gaussian rbf
-    out = grbf(out,rbf_weights,rbf_centers,rbf_precision,data_lut)
-    # conv_tranpose2d
-    out = pad_transpose2D(conv2d_t(out,weights,bias = None,stride = 1),pad,padType)
-    # Projection of the result, given the input of the network
-    out = l2Prox(input-out,net_input,alpha_prox,stdn)
-    
-    return out
-
 def residualDenoise_grbf(input,net_input,weights,weights_t,rbf_weights,rbf_centers,\
                   rbf_precision,data_lut,alpha_prox,stdn,pad=0,padType='zero',\
                   alpha=None,alpha_t=None,normalizedWeights=False,\
@@ -106,6 +83,29 @@ def residualDenoise_grbf(input,net_input,weights,weights_t,rbf_weights,rbf_cente
     out = grbf(out,rbf_weights,rbf_centers,rbf_precision,data_lut)
     # conv_tranpose2d
     out = pad_transpose2D(conv2d_t(out,weights_t,bias = None,stride = 1),pad,padType)
+    # Projection of the result, given the input of the network
+    out = l2Prox(input-out,net_input,alpha_prox,stdn)
+    
+    return out
+
+def residualDenoise_grbf_sw(input,net_input,weights,rbf_weights,rbf_centers,\
+                  rbf_precision,data_lut,alpha_prox,stdn,pad=0,padType='zero',\
+                  alpha=None,normalizedWeights=False,zeroMeanWeights=False,\
+                  lb=-100,ub=100):
+    r""" residual layer with shared weights between the convolutional and 
+    transpose convolutional layers."""
+    
+    if (normalizedWeights and alpha is not None) or zeroMeanWeights:
+        weights = weightNormalization(weights,alpha,normalizedWeights,zeroMeanWeights)
+
+    # conv2d
+    out = conv2d(pad2D(input,pad,padType),weights,bias = None,stride = 1)
+    #clipping of the values before feeding them to the grbf layer
+    out = th.clamp(out,lb,ub)
+    # gaussian rbf
+    out = grbf(out,rbf_weights,rbf_centers,rbf_precision,data_lut)
+    # conv_tranpose2d
+    out = pad_transpose2D(conv2d_t(out,weights,bias = None,stride = 1),pad,padType)
     # Projection of the result, given the input of the network
     out = l2Prox(input-out,net_input,alpha_prox,stdn)
     
