@@ -21,6 +21,7 @@ from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
 from math import log10
 from re import match as pattern_match
+from collections import OrderedDict
 
 def findLastCheckpoint(expDir):
     """Finds the latest checkpoint."""
@@ -91,6 +92,7 @@ parser.add_argument('--lr', type = float, default = 1e-3, help='learning rate. D
 parser.add_argument('--lr_milestones', type = tupleOfInts, default = 100, help="Scheduler's learning rate milestones. Default=[100].")
 parser.add_argument('--lr_gamma', type = float, default = 0.1, help="multiplicative factor of learning rate decay.")
 parser.add_argument('--cuda', action='store_true', help='use cuda?')
+parser.add_argument('--gpu_device', type = int, default = 0, help='which gpu to use?')
 parser.add_argument('--threads', type = int, default = 4, help='number of threads for data loader to use.')
 parser.add_argument('--seed', type = int, default = 123, help='random seed to use. Default=123.')
 parser.add_argument('--stdn', type = tupleOfFloats, default='(5,9,13,17,21,25,29)', help=" Number of noise levels (standard deviation) for which the network will be trained.")
@@ -98,6 +100,7 @@ parser.add_argument('--saveFreq', type = int, default = 10, help='Every how many
 parser.add_argument('--saveBest', action='store_true', help='save the best model parameters?')
 parser.add_argument('--xid', type = str, default = '', help='Identifier for the current experiment')
 parser.add_argument('--resume', action='store_true', help='resume training?')
+parser.add_argument('--initModelPath', type = str, default = '', help='Initialize the model paramaters from a saved state.')
 # DataSet Parameters
 parser.add_argument('--imdbPath', type = str, default = '', help='location of the dataset.')
 parser.add_argument('--data_seed', type = int, default = 20180102, help='random seed for data generation. Default=20180102')
@@ -135,7 +138,7 @@ if opt.xid == '':
 else:
     opt.xid = 'UDNet_'+opt.xid
 
-dirname = "{}_{}_stages:{}_kernel:{}x{}_filters:{}{}_stdn:{}".format(opt.xid,\
+dirname = "{}_{}_stages:{}_kernel:{}x{}_filters:{}{}_stdn:{}_joint_train".format(opt.xid,\
                  strc,opt.stages,opt.kernel_size[0],opt.kernel_size[1],\
                  opt.num_filters,str_ws,stdn)
 
@@ -143,6 +146,9 @@ currentPath = os.path.dirname(os.path.realpath(__file__))
 #currentPath = os.path.dirname(os.path.realpath('pydl/networks/UDNet/net_joint_train.py'))
 dirPath = os.path.join(currentPath,'Results',dirname)
 os.makedirs(dirPath,exist_ok = True)
+
+# save the input arguments
+th.save(opt,os.path.join(dirPath,"args.pth"))
 
 input_channels = 3 if opt.color else 1
 output_features = opt.num_filters
@@ -152,6 +158,11 @@ if opt.cuda and not th.cuda.is_available():
 
 th.manual_seed(opt.seed)
 if opt.cuda:
+    if opt.gpu_device != th.cuda.current_device()\
+        and (opt.gpu_device >= 0 and opt.gpu_device < th.cuda.device_count()):
+        print("===> Setting GPU device {}".format(opt.gpu_device))
+        th.cuda.set_device(opt.gpu_device)
+        
     th.cuda.manual_seed(opt.seed)
 
 print('===> Loading datasets')
@@ -162,11 +173,29 @@ testing_data_loader = DataLoader(dataset=test_set, num_workers=opt.threads, batc
 
 
 print('===> Building model')
+
+# Parameters that we need to specify in order to initialize our model
+params = OrderedDict(kernel_size=opt.kernel_size,input_channels=input_channels,\
+         output_features=output_features,rbf_mixtures=opt.rbf_mixtures,\
+         rbf_precision=opt.rbf_precision,stages=opt.stages,pad=opt.pad,\
+         padType=opt.padType,convWeightSharing=opt.convWeightSharing,\
+         scale_f=opt.scale_f,scale_t=opt.scale_t,normalizedWeights=\
+         opt.normalizedWeights,zeroMeanWeights=opt.zeroMeanWeights,rbf_start=\
+         opt.rbf_start,rbf_end=opt.rbf_end,data_min=opt.data_min,data_max=\
+         opt.data_max,data_step=opt.data_step,alpha=opt.alpha,clb=opt.clb,\
+         cub=opt.cub)
+
 model = UDNet(opt.kernel_size,input_channels,output_features,opt.rbf_mixtures,\
             opt.rbf_precision,opt.stages,opt.pad,opt.padType,opt.convWeightSharing,\
             opt.scale_f,opt.scale_t,opt.normalizedWeights,opt.zeroMeanWeights,\
             opt.rbf_start,opt.rbf_end,opt.data_min,opt.data_max,opt.data_step,\
             opt.alpha,opt.clb,opt.cub)
+
+if opt.initModelPath != '':
+    state = th.load(opt.initModelPath,map_location = lambda storage, loc:storage)
+    model.load_state_dict(state['model_state_dict'])
+    opt.resume = False
+
 criterion = nn.MSELoss(size_average=True,reduce=True)
 
 optimizer = optim.Adam(model.parameters(), lr=opt.lr, betas=(0.9, 0.999), eps=1e-04)
@@ -182,23 +211,23 @@ if opt.resume :
         loadPath = os.path.join(dirPath, "model_epoch_best.pth")
         loadPath = loadPath if os.path.isfile(loadPath) else ''
         if loadPath != '':
-            msg = "{} :: Resuming by loading the best model.".format(dirname)
+            msg = "{} :: Resuming by loading the best model.\n".format(dirname)
             print('===>'+msg)
         elif findLastCheckpoint(dirPath) > 0 :
             start = findLastCheckpoint(dirPath)
-            msg = "{} :: Resuming by loading epoch {}".format(dirname,start)
+            msg = "{} :: Resuming by loading epoch {}\n".format(dirname,start)
             print('===>'+msg)
             loadPath = os.path.join(dirPath, "model_epoch_{}.pth".format(start))            
     elif findLastCheckpoint(dirPath) > 0 :
         start = findLastCheckpoint(dirPath)
-        msg = "{} :: Resuming by loading epoch {}".format(dirname,start)
+        msg = "{} :: Resuming by loading epoch {}\n".format(dirname,start)
         print('===>'+msg)
         loadPath = os.path.join(dirPath, "model_epoch_{}.pth".format(start))
     else:
         loadPath = ''
         
     if loadPath == '':
-        print('===> No saved model to resume from.')
+        print('===> No saved model to resume from.\n')
     else:
         if opt.cuda:
             state = th.load(loadPath)
@@ -230,7 +259,7 @@ def train(epoch):
 
         print("===> train:: Epoch[{}]({}/{}): PSNR: {:.4f} dB".format(epoch, iteration, len(training_data_loader),10*log10(opt.cub**2/loss.item())))
 
-    print("===> train:: Epoch {} Complete: Avg. PSNR: {:.4f} dB".format(epoch, 10*log10(opt.cub**2/(epoch_loss / len(training_data_loader)))))
+    print("===> train:: Epoch[{}] Complete: Avg. PSNR: {:.4f} dB".format(epoch, 10*log10(opt.cub**2/(epoch_loss / len(training_data_loader)))))
     return epoch_loss
 
 
@@ -256,7 +285,7 @@ def save_checkpoint(state):
     else:
         savePath = os.path.join(dirPath, "model_epoch_{}.pth".format(state['epoch']))
     th.save(state, savePath)
-    print("Checkpoint saved to {}".format(savePath))
+    print("===> Checkpoint saved to {}".format(savePath))
 
 
 epoch_loss = float('inf')
@@ -271,12 +300,13 @@ for epoch in range(start+1, opt.nEpochs + 1):
             epoch_loss = epoch_loss_new    
             state = {'epoch':epoch, 'model_state_dict':model.state_dict(),\
                  'optimizer_state_dict':optimizer.state_dict(),\
-                 'rng_state':th.get_rng_state()}
+                 'rng_state':th.get_rng_state(),'params':params}
             save_checkpoint(state)
         elif not opt.saveBest:
             state = {'epoch':epoch, 'model_state_dict':model.state_dict(),\
                  'optimizer_state_dict':optimizer.state_dict(),\
-                 'rng_state':th.get_rng_state()}
+                 'rng_state':th.get_rng_state(),'params':params}
             save_checkpoint(state)
+    print("******************************************************")
             
 print("\n ============ Training completed ======================\n")

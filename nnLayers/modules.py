@@ -59,17 +59,16 @@ class ResidualRBFLayer(nn.Module):
         self.conv_weights = nn.Parameter(th.Tensor(th.Size(shape)))
         init.dct(self.conv_weights)
         
-        if not self.convWeightSharing:
-            self.convt_weights = nn.Parameter(th.Tensor(th.Size(shape)))
-            init.dct(self.convt_weights)
-        
         # Initialize the scaling coefficients for the conv weight normalization
         if scale_f and normalizedWeights:
             self.scale_f = nn.Parameter(th.Tensor(output_features).fill_(1))
         else:
-            self.register_parameter('scale_f', None)
+            self.register_parameter('scale_f', None)        
         
-        if not convWeightSharing:
+        if not self.convWeightSharing:
+            self.convt_weights = nn.Parameter(th.Tensor(th.Size(shape)))
+            init.dct(self.convt_weights)
+        
             if scale_t and normalizedWeights:
                 self.scale_t = nn.Parameter(th.Tensor(output_features).fill_(1))
             else :
@@ -77,7 +76,7 @@ class ResidualRBFLayer(nn.Module):
         
         # Initialize the params for the proxL2
         if alpha :
-            self.alpha_prox = nn.Parameter(th.Tensor(1).fill_(0))
+            self.alpha_prox = nn.Parameter(th.Tensor(1).fill_(0.1))
         else:
             self.register_parameter('alpha_prox', None)
         
