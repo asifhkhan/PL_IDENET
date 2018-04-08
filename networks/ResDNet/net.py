@@ -246,3 +246,30 @@ class ResDNet_old(nn.Module):
             + 'depth = ' + str(self.rpa_depth) \
             + ', convWeightSharing = ' + str(self.conv_weights is self.convt_weights)\
             + ', shortcut = ' + str(self.shortcut) + ')' 
+
+def loadModel(filePath,location = 'cpu'):
+    """Loads a trained model.
+    
+    filePath : the path of the file containing the parameters and the architecture
+               of the model.
+    location : Where to load the model. (Default: cpu)
+    """
+    # We assume that the parameters of the model are saved in GPU format.
+    if location == 'gpu' and th.cuda.is_available():
+        state = th.load(filePath)
+    elif location == 'cpu':
+        state =  th.load(filePath,map_location=lambda storage,loc:storage)
+    else:
+        raise Exception("Unknown device to load the model.")
+    
+    # state['params'] is an Ordered dictionary with the following keys:
+    #    odict_keys(['kernel_size', 'input_channels', 'output_features', \
+    #   'rbf_mixtures', 'rbf_precision', 'stages', 'pad', 'padType', \
+    #  'convWeightSharing', 'scale_f', 'scale_t', 'normalizedWeights', \
+    #   'zeroMeanWeights', 'rbf_start', 'rbf_end', 'data_min', 'data_max', \
+    #   'data_step', 'alpha', 'clb', 'cub'])
+    
+    model = ResDNet(*state['params'].values())
+    model.load_state_dict(state['model_state_dict'])
+
+    return model
