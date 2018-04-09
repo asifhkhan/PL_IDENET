@@ -355,7 +355,7 @@ for stage in range(opt.stages):
                 input = input.cuda()
                 sigma = sigma.cuda()
             out = smodel(input,sigma).cpu().detach().numpy()
-            output = np.concatanate((outout,out),axis=0) if output.size else out
+            output = np.concatanate((output,out),axis=0) if output.size else out
             
         
 	    # Now that we have computed the output of the stage for all images in
