@@ -357,6 +357,7 @@ for stage in range(opt.stages):
                 sigma = sigma.cuda()
         
             output = th.cat((output,smodel(input,sigma).cpu()))
+            print("output.dtype={}".format(output.dtype))
         
 	# Now that we have computed the output of the stage for all images in
         # both the train_set and the test_set we can create the new train_set
@@ -412,7 +413,7 @@ if opt.cuda:
 # created model.
 copyModelParams(model,Lmodel)
 
-
+    
 # Save the final model 
 params = OrderedDict(kernel_size=opt.kernel_size,input_channels=input_channels,\
          output_features=output_features,rbf_mixtures=opt.rbf_mixtures,\
