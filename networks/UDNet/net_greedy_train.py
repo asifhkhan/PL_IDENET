@@ -323,7 +323,6 @@ for stage in range(opt.stages):
     # First we need to create a DataLoader for all the data from both the 
     # train_set and the test_set so that we can compute the output of the 
     # next stage.
-    smodel.cpu()
     if stage+1 < opt.stages:
         full_data = train_set.train_data
         test_data = test_set.test_data
@@ -349,21 +348,20 @@ for stage in range(opt.stages):
         # stages of the network
         smodel.bbProj.min_val = float('-inf')
         smodel.bbProj.max_val = float('+inf')
-        output = th.Tensor()
+        output = np.ndarray(0)
         for batch in full_data_loader:
             input,sigma = Variable(batch[0]), Variable(batch[2])
-            #if opt.cuda:
-                #input = input.cuda()
-                #sigma = sigma.cuda()
-        
-            output = th.cat((output,smodel(input,sigma).cpu()))
-            print("output.dtype={}".format(output.dtype))
+            if opt.cuda:
+                input = input.cuda()
+                sigma = sigma.cuda()
+            out = smodel(input,sigma).cpu().detach().numpy()
+            output = np.concatanate((outout,out),axis=0) if output.size else out
+            
         
 	    # Now that we have computed the output of the stage for all images in
         # both the train_set and the test_set we can create the new train_set
         # and test_set, respectively, that will be used to feed the next stage
         # of the network.
-        output = output.detach().numpy()
         output = output.reshape((len(train_set.stdn),output.shape[0]//len(train_set.stdn))+\
                                 output.shape[1:])
         
@@ -376,7 +374,7 @@ for stage in range(opt.stages):
         test_set.test_gt = full_gt[Ntrain:,...]
     
 
-    
+    smodel.cpu()
 print("\n ============ Training completed ======================\n")
 
 
