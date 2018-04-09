@@ -332,8 +332,7 @@ for stage in range(opt.stages):
             test_data.reshape((len(train_set.stdn),test_data.shape[0]//len(train_set.stdn))+\
                               test_data.shape[1:])),axis=1)
         full_data = full_data.reshape((prod(full_data.shape[0:2]),)+full_data.shape[2:])
-    
-    
+  
         full_gt = train_set.train_gt
         test_gt = test_set.test_gt
         full_gt = np.concatenate((full_gt,test_gt),axis = 0)
@@ -358,8 +357,8 @@ for stage in range(opt.stages):
                 sigma = sigma.cuda()
         
             output = th.cat((output,smodel(input,sigma).cpu()))
-
-        # Now that we have computed the output of the stage for all images in
+        
+	# Now that we have computed the output of the stage for all images in
         # both the train_set and the test_set we can create the new train_set
         # and test_set, respectively, that will be used to feed the next stage
         # of the network.
@@ -405,6 +404,9 @@ model = UDNet(opt.kernel_size,input_channels,output_features,\
         opt.convWeightSharing,opt.scale_f,opt.scale_t,opt.normalizedWeights,\
         opt.zeroMeanWeights,opt.rbf_start,opt.rbf_end,opt.data_min,\
         opt.data_max,opt.data_step,opt.alpha,opt.clb,opt.cub)
+
+if opt.cuda:
+    Lmodel = Lmodel.cpu()
 
 # Copy the parameters of each 1-stage network to the correct stage of the newly
 # created model.
