@@ -323,7 +323,7 @@ for stage in range(opt.stages):
     # First we need to create a DataLoader for all the data from both the 
     # train_set and the test_set so that we can compute the output of the 
     # next stage.
-    
+    smodel.cpu()
     if stage+1 < opt.stages:
         full_data = train_set.train_data
         test_data = test_set.test_data
@@ -352,14 +352,14 @@ for stage in range(opt.stages):
         output = th.Tensor()
         for batch in full_data_loader:
             input,sigma = Variable(batch[0]), Variable(batch[2])
-            if opt.cuda:
-                input = input.cuda()
-                sigma = sigma.cuda()
+            #if opt.cuda:
+                #input = input.cuda()
+                #sigma = sigma.cuda()
         
             output = th.cat((output,smodel(input,sigma).cpu()))
             print("output.dtype={}".format(output.dtype))
         
-	# Now that we have computed the output of the stage for all images in
+	    # Now that we have computed the output of the stage for all images in
         # both the train_set and the test_set we can create the new train_set
         # and test_set, respectively, that will be used to feed the next stage
         # of the network.
@@ -374,8 +374,8 @@ for stage in range(opt.stages):
         test_set.test_data = output[:,Ntrain:,...].\
                                     reshape((len(train_set.stdn)*Ntest,Nchannels,H,W))        
         test_set.test_gt = full_gt[Ntrain:,...]
-        
-        
+    
+
     
 print("\n ============ Training completed ======================\n")
 
@@ -406,8 +406,8 @@ model = UDNet(opt.kernel_size,input_channels,output_features,\
         opt.zeroMeanWeights,opt.rbf_start,opt.rbf_end,opt.data_min,\
         opt.data_max,opt.data_step,opt.alpha,opt.clb,opt.cub)
 
-if opt.cuda:
-    Lmodel = Lmodel.cpu()
+#if opt.cuda:
+#    Lmodel = Lmodel.cpu()
 
 # Copy the parameters of each 1-stage network to the correct stage of the newly
 # created model.
