@@ -86,6 +86,8 @@ parser.add_argument('--rpa_bias2', action = 'store_true', help="use bias for the
 parser.add_argument('--numparams_prelu1', type = int, default = 1, help="Number of parameters for the first prelu layer in RPA.")
 parser.add_argument('--numparams_prelu2', type = int, default = 1, help="Number of parameters for the second prelu layer in RPA.")
 parser.add_argument('--prelu_init', type = float, default = 0.1, help="Value to initialize the prelu parameters.")
+parser.add_argument('--rpa_scale1', action = 'store_true', help="use scaling for the first convolution layer in the RPA layer?")
+parser.add_argument('--rpa_scale2', action = 'store_true', help="use scaling for the second convolution layer in the RPA layer?")
 parser.add_argument('--rpa_normalizedWeights', action = 'store_true',help="use weightNormalization in the RPA layer?")
 parser.add_argument('--rpa_zeroMeanWeights', action = 'store_true',help="use zero-mean normalization in the RPA layer?")
 parser.add_argument('--shortcut', type = tupleOfBools, default = '(False,True)', help="Indicates whether a shortcut is used in the corresponding RPA layer.")
@@ -196,7 +198,8 @@ params = OrderedDict(kernel_size=opt.kernel_size,input_channels=input_channels,\
          rpa_output_features=opt.rpa_output_features,rpa_init=opt.rpa_init,\
          rpa_bias1=opt.rpa_bias1,rpa_bias2=opt.rpa_bias2,numparams_prelu1=\
          opt.numparams_prelu1,numparams_prelu2=opt.numparams_prelu2,\
-         prelu_init=opt.prelu_init,rpa_normalizedWeights=opt.rpa_normalizedWeights,\
+         prelu_init=opt.prelu_init,rpa_scale1=opt.rpa_scale1,rpa_scale2=\
+         opt.rpa_scale2,rpa_normalizedWeights=opt.rpa_normalizedWeights,\
          rpa_zeroMeanWeights=opt.rpa_zeroMeanWeights,shortcut=opt.shortcut,\         
          clb=opt.clb,cub=opt.cub)
 
