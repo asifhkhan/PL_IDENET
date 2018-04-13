@@ -8,7 +8,7 @@ Created on Wed Apr 11 22:32:58 2018
 """
 
 import argparse
-from .net import UDNet
+from .net import ResDNet
 from ...datasets.BSDS import BSDS
 from pydl.utils import formatInput2Tuple
 
@@ -196,15 +196,11 @@ params = OrderedDict(kernel_size=opt.kernel_size,input_channels=input_channels,\
          rpa_output_features=opt.rpa_output_features,rpa_init=opt.rpa_init,\
          rpa_bias1=opt.rpa_bias1,rpa_bias2=opt.rpa_bias2,numparams_prelu1=\
          opt.numparams_prelu1,numparams_prelu2=opt.numparams_prelu2,\
-         prelu_init=opt.prelu_init,
-         
+         prelu_init=opt.prelu_init,rpa_normalizedWeights=opt.rpa_normalizedWeights,\
+         rpa_zeroMeanWeights=opt.rpa_zeroMeanWeights,shortcut=opt.shortcut,\         
          clb=opt.clb,cub=opt.cub)
 
-model = UDNet(opt.kernel_size,input_channels,output_features,opt.rbf_mixtures,\
-            opt.rbf_precision,opt.stages,opt.pad,opt.padType,opt.convWeightSharing,\
-            opt.scale_f,opt.scale_t,opt.normalizedWeights,opt.zeroMeanWeights,\
-            opt.rbf_start,opt.rbf_end,opt.data_min,opt.data_max,opt.data_step,\
-            opt.alpha,opt.clb,opt.cub)
+model = ResDNet(*params.values())
 
 if opt.initModelPath != '':
     state = th.load(opt.initModelPath,map_location = lambda storage, loc:storage)
