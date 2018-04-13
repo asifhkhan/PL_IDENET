@@ -44,9 +44,19 @@ def tupleOfData(s,dtype):
         s = dtype(s)
     return s
 
+def tupleOfBools(s):   
+    if s.find('(',0,1) > -1: # If the first character of the string is '(' then
+        # this is a tuple and we keep only the substring with the values 
+        # separated by commas, i.e., s[1:-1]. Then we create a list that holds
+        # the characters which corresponds to the entries of the tuple by using
+        # s[1:-1].split(',')
+        s = tuple(i == 'True' for i in s[1:-1].replace(" ","").split(',') if i!="")
+    else:
+        s = (s == 'True')
+    return s
+
 tupleOfInts = lambda s: tupleOfData(s,int)
 tupleOfFloats = lambda s: tupleOfData(s,float)
-tupleOfBools = lambda s: tupleOfData(s,bool)
 
 def tupleOfIntsorString(s):   
     if s == "same":
