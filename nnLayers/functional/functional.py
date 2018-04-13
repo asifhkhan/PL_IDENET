@@ -354,7 +354,7 @@ class L2Proj(th.autograd.Function):
         
         epsilon = stdn.mul(alpha.exp().mul(N)).view(-1,1,1,1)
         
-        input_norm = input.view(batch,-1).norm(p=2,dim = 1).view(batch,1,1,1)
+        input_norm = input.contiguous().view(batch,-1).norm(p=2,dim = 1).view(batch,1,1,1)
         max_norm = input_norm.max(epsilon)
         
         ctx.save_for_backward(input,input_norm,max_norm,epsilon)
