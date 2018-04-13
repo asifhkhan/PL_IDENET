@@ -62,7 +62,7 @@ def tupleOfIntsorString(s):
     return s
 
 
-parser = argparse.ArgumentParser(description='Joint-Training of UDNet')
+parser = argparse.ArgumentParser(description='Joint-Training of ResDNet')
 # Network parameters
 parser.add_argument('--kernel_size', type = tupleOfInts, default = '(5,5)', help="The spatial support of the filters in the network.")
 parser.add_argument('--color', action='store_true', help="Type of images used to train the network.")
