@@ -200,7 +200,7 @@ params = OrderedDict(kernel_size=opt.kernel_size,input_channels=input_channels,\
          opt.numparams_prelu1,numparams_prelu2=opt.numparams_prelu2,\
          prelu_init=opt.prelu_init,rpa_scale1=opt.rpa_scale1,rpa_scale2=\
          opt.rpa_scale2,rpa_normalizedWeights=opt.rpa_normalizedWeights,\
-         rpa_zeroMeanWeights=opt.rpa_zeroMeanWeights,shortcut=opt.shortcut,\         
+         rpa_zeroMeanWeights=opt.rpa_zeroMeanWeights,shortcut=opt.shortcut,\
          clb=opt.clb,cub=opt.cub)
 
 model = ResDNet(*params.values())
