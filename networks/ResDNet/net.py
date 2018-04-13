@@ -102,7 +102,7 @@ class ResDNet(nn.Module):
         
     def forward(self,input,stdn):
         
-        output = nconv2D(input,self.conv_weights,bias=False,stride=1,\
+        output = nconv2D(input,self.conv_weights,bias=None,stride=1,\
                      pad=self.pad,padType=self.padType,dilation=1,\
                      scale=self.scale_f,normalizedWeights=self.normalizedWeights,
                      zeroMeanWeights=self.zeroMeanWeights)
@@ -110,12 +110,12 @@ class ResDNet(nn.Module):
             output = m(output)
         
         if self.convWeightSharing:
-            output = nconv_transpose2D(output,self.conv_weights,bias=False,\
+            output = nconv_transpose2D(output,self.conv_weights,bias=None,\
                      stride=1,pad=self.pad,padType=self.padType,dilation=1,\
                      scale=self.scale_f,normalizedWeights=self.normalizedWeights,
                      zeroMeanWeights=self.zeroMeanWeights)
         else:
-            output = nconv_transpose2D(output,self.convt_weights,bias=False,\
+            output = nconv_transpose2D(output,self.convt_weights,bias=None,\
                      stride=1,pad=self.pad,padType=self.padType,dilation=1,\
                      scale=self.scale_t,normalizedWeights=self.normalizedWeights,
                      zeroMeanWeights=self.zeroMeanWeights)            
