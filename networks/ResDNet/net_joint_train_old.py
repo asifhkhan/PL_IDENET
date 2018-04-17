@@ -8,7 +8,7 @@ Created on Wed Apr 11 22:32:58 2018
 """
 
 import argparse
-from .net import ResDNet
+from .net import ResDNet_old as ResDNet
 from ...datasets.BSDS import BSDS
 from pydl.utils import formatInput2Tuple
 
@@ -81,8 +81,6 @@ parser.add_argument('--convWeightSharing', action='store_true',help="use shared 
 parser.add_argument('--pad', type = tupleOfIntsorString, default = 'same', help="amount of padding of the input")
 parser.add_argument('--padType', type = str, default = 'symmetric', help="The type of padding used before convolutions.")
 parser.add_argument('--conv_init', type = str, default = 'dct', help='type of initialization for the convolutional layers.')
-parser.add_argument('--bias_f', action = 'store_true', help="use bias for convolution layer of the model?")
-parser.add_argument('--bias_t', action = 'store_true', help="use bias for transpose convolution layer of the model?")
 parser.add_argument('--scale_f', action = 'store_true', help="use scaling for the convolution weights?")
 parser.add_argument('--scale_t', action = 'store_true', help="use scaling for the transpose convolution weights?")
 parser.add_argument('--normalizedWeights', action = 'store_true',help="use weightNormalization?")
@@ -95,8 +93,8 @@ parser.add_argument('--rpa_output_features', type = int, default = 64, help="Num
 parser.add_argument('--rpa_init', type = str, default = 'msra', help='type of initialization for the convolutional layers in the RPA layer.')
 parser.add_argument('--rpa_bias1', action = 'store_true', help="use bias for the first convolution layer in the RPA layer?")
 parser.add_argument('--rpa_bias2', action = 'store_true', help="use bias for the second convolution layer in the RPA layer?")
-parser.add_argument('--rpa_prelu1_mc', action = 'store_true', help="Use a single or multiple parameters for the first prelu layer in RPA.")
-parser.add_argument('--rpa_prelu2_mc', action = 'store_true', help="Use a single or multiple parameters for the second prelu layer in RPA.")
+parser.add_argument('--numparams_prelu1', type = int, default = 1, help="Number of parameters for the first prelu layer in RPA.")
+parser.add_argument('--numparams_prelu2', type = int, default = 1, help="Number of parameters for the second prelu layer in RPA.")
 parser.add_argument('--prelu_init', type = float, default = 0.1, help="Value to initialize the prelu parameters.")
 parser.add_argument('--rpa_scale1', action = 'store_true', help="use scaling for the first convolution layer in the RPA layer?")
 parser.add_argument('--rpa_scale2', action = 'store_true', help="use scaling for the second convolution layer in the RPA layer?")
@@ -202,14 +200,14 @@ print('===> Building model')
 # Parameters that we need to specify in order to initialize our model
 params = OrderedDict(kernel_size=opt.kernel_size,input_channels=input_channels,\
          output_features=output_features,convWeightSharing=opt.convWeightSharing,\
-         pad=opt.pad,padType=opt.padType,conv_init=opt.conv_init,bias_f = \
-         opt.bias_f,bias_t = opt.bias_t,scale_f=opt.scale_f,scale_t=opt.scale_t,\
-         normalizedWeights=opt.normalizedWeights,zeroMeanWeights=opt.zeroMeanWeights,\
+         pad=opt.pad,padType=opt.padType,conv_init=opt.conv_init,\
+         scale_f=opt.scale_f,scale_t=opt.scale_t,normalizedWeights=\
+         opt.normalizedWeights,zeroMeanWeights=opt.zeroMeanWeights,\
          alpha=opt.alpha,rpa_depth=opt.rpa_depth,rpa_kernel_size1=\
          opt.rpa_kernel_size1,rpa_kernel_size2=opt.rpa_kernel_size2,\
          rpa_output_features=opt.rpa_output_features,rpa_init=opt.rpa_init,\
-         rpa_bias1=opt.rpa_bias1,rpa_bias2=opt.rpa_bias2,rpa_prelu1_mc=\
-         opt.rpa_prelu1_mc,rpa_prelu2_mc=opt.rpa_prelu2_mc,\
+         rpa_bias1=opt.rpa_bias1,rpa_bias2=opt.rpa_bias2,numparams_prelu1=\
+         opt.numparams_prelu1,numparams_prelu2=opt.numparams_prelu2,\
          prelu_init=opt.prelu_init,rpa_scale1=opt.rpa_scale1,rpa_scale2=\
          opt.rpa_scale2,rpa_normalizedWeights=opt.rpa_normalizedWeights,\
          rpa_zeroMeanWeights=opt.rpa_zeroMeanWeights,shortcut=opt.shortcut,\

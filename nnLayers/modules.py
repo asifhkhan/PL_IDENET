@@ -254,12 +254,12 @@ class ResidualPreActivationLayer(nn.Module):
         
         # Initialize the scaling coefficients for the conv weights normalization
         if scale1 and self.normalizedWeights[0]:
-            self.scale1 = nn.Parameter(th.Tensor(output_features).fill_(1))
+            self.scale1 = nn.Parameter(th.Tensor(output_features).fill_(0.1))
         else:
             self.register_parameter('scale1', None)        
         
         if scale2 and self.normalizedWeights[1]:
-            self.scale2 = nn.Parameter(th.Tensor(input_channels).fill_(1))
+            self.scale2 = nn.Parameter(th.Tensor(input_channels).fill_(0.1))
         else:
             self.register_parameter('scale2', None)        
 
