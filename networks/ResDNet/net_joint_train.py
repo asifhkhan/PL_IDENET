@@ -155,7 +155,7 @@ if isinstance(opt.stdn,tuple) :
     if len(opt.stdn) == 1:
         stdn = str(opt.stdn[0])
     else:
-        stdn = str(opt.stdn[0])+"->"+str(opt.stdn[-1])
+        stdn = "("+str(opt.stdn[0])+"->"+str(opt.stdn[-1])+")"
 else:
     stdn = str(opt.stdn)
     
