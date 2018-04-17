@@ -151,10 +151,13 @@ opt.kernel_size = formatInput2Tuple(opt.kernel_size,int,2)
 opt.rpa_kernel_size1 = formatInput2Tuple(opt.rpa_kernel_size1,int,2)
 opt.rpa_kernel_size2 = formatInput2Tuple(opt.rpa_kernel_size2,int,2)
 
-if isinstance(opt.stdn,tuple) and len(opt.stdn) == 1:
-    stdn = opt.stdn[0]
+if isinstance(opt.stdn,tuple) :
+    if len(opt.stdn) == 1:
+        stdn = str(opt.stdn[0])
+    else:
+        stdn = str(opt.stdn[0])+"->"+str(opt.stdn[-1])
 else:
-    stdn = opt.stdn
+    stdn = str(opt.stdn)
     
 if opt.xid == '':
     opt.xid = 'ResDNet'
