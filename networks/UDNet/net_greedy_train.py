@@ -17,7 +17,7 @@ import os.path
 import torch as th
 import torch.nn as nn
 import torch.optim as optim
-from torch.autograd import Variable
+#from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
 from math import log10
@@ -247,7 +247,7 @@ for stage in range(opt.stages):
         scheduler.step()
         epoch_loss = 0
         for iteration, batch in enumerate(training_data_loader, 1):
-            input, target, sigma = Variable(batch[0]), Variable(batch[1]), Variable(batch[2])
+            input, target, sigma = batch[0], batch[1], batch[2]
             if opt.cuda:
                 input = input.cuda()
                 target = target.cuda()
@@ -270,13 +270,13 @@ for stage in range(opt.stages):
     def test():
         avg_psnr = 0
         for batch in testing_data_loader:
-            input, target, sigma = Variable(batch[0]), Variable(batch[1]), Variable(batch[2])
+            input, target, sigma = batch[0], batch[1], batch[2]
             if opt.cuda:
                 input = input.cuda()
                 target = target.cuda()
                 sigma = sigma.cuda()
 
-            prediction = smodel(input,sigma)
+            with th.no_grad(): prediction = smodel(input,sigma)
             mse = criterion(prediction, target)
             psnr = 10 * log10(opt.cub**2 / mse.item())
             avg_psnr += psnr
@@ -350,11 +350,12 @@ for stage in range(opt.stages):
         smodel.bbProj.max_val = float('+inf')
         output = np.ndarray(0)
         for batch in full_data_loader:
-            input,sigma = Variable(batch[0]), Variable(batch[2])
+            input,sigma = batch[0], batch[2]
             if opt.cuda:
                 input = input.cuda()
                 sigma = sigma.cuda()
-            out = smodel(input,sigma).cpu().detach().numpy()
+            
+            with th.no_grad(): out = smodel(input,sigma).cpu().numpy()
             output = np.concatenate((output,out),axis=0) if output.size else out
             
         

@@ -1466,6 +1466,41 @@ def gen_imdb_BSDS500_fromList(\
     elif data == 'test':
         return imdb_test
     
+def wmad_estimator(x,wname='db7',mode='symmetric'):
+    r"""Accepts either a torch tensor or an ndarray and provides an estimate
+    of the standard deviation of the noise degrading the input. It can operate
+    on a batch of multichannel images. If the input is a torch Tensor we assume
+    that the dimensions are B x C x H x W otherwise H x W x C x B, where H, W 
+    are the spatial dimensions, C the image channels and B the number of images."""
+    from pywt import dwtn
+    
+    assert(isinstance(wname,str)),"The second input argument must be a string "\
+    +"indicating the wavelet basis to be used for the decomposition."
+
+    tensor = False if type(x) is np.ndarray else True
+    
+    if tensor: 
+        assert(x.dim() < 5),"Input is expected to be at most a 4D tensor."
+        while x.dim() != 4:
+            x = x.unsqueeze(0)
+        cuda = x.is_cuda
+        x = x.cpu().numpy().transpose((2,3,1,0))        
+    else:
+        assert(x.ndim < 5),"Input is expected to be at most a 4D ndarray."
+        while x.ndim != 4:
+            x.shape += (1,)
+    
+    
+    c = dwtn(x,wname,mode=mode,axes = (0,1))['dd']
+    prod = lambda z: reduce(lambda x,y: x*y,z)
+    c = c.reshape((prod(c.shape[0:2]),)+c.shape[2:])
+    
+    sigma = np.median(np.abs(c)/.6745,axis = 0).mean(axis = 0)
+        
+    if tensor:
+        sigma = th.from_numpy(sigma).cuda() if cuda else th.from_numpy(sigma)
+    
+    return sigma 
     
 #if __name__=="__main__":
 #    

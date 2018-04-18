@@ -16,7 +16,7 @@ import os.path
 import torch as th
 import torch.nn as nn
 import torch.optim as optim
-from torch.autograd import Variable
+#from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
 from math import log10
@@ -185,11 +185,7 @@ params = OrderedDict(kernel_size=opt.kernel_size,input_channels=input_channels,\
          opt.data_max,data_step=opt.data_step,alpha=opt.alpha,clb=opt.clb,\
          cub=opt.cub)
 
-model = UDNet(opt.kernel_size,input_channels,output_features,opt.rbf_mixtures,\
-            opt.rbf_precision,opt.stages,opt.pad,opt.padType,opt.convWeightSharing,\
-            opt.scale_f,opt.scale_t,opt.normalizedWeights,opt.zeroMeanWeights,\
-            opt.rbf_start,opt.rbf_end,opt.data_min,opt.data_max,opt.data_step,\
-            opt.alpha,opt.clb,opt.cub)
+model = UDNet(*params.values())
 
 if opt.initModelPath != '':
     state = th.load(opt.initModelPath,map_location = lambda storage, loc:storage)
@@ -245,7 +241,7 @@ def train(epoch):
     scheduler.step()
     epoch_loss = 0
     for iteration, batch in enumerate(training_data_loader, 1):
-        input, target, sigma = Variable(batch[0]), Variable(batch[1]), Variable(batch[2])
+        input, target, sigma = batch[0], batch[1], batch[2]
         if opt.cuda:
             input = input.cuda()
             target = target.cuda()
@@ -266,13 +262,13 @@ def train(epoch):
 def test():
     avg_psnr = 0
     for batch in testing_data_loader:
-        input, target, sigma = Variable(batch[0]), Variable(batch[1]), Variable(batch[2])
+        input, target, sigma = batch[0], batch[1], batch[2]
         if opt.cuda:
             input = input.cuda()
             target = target.cuda()
             sigma = sigma.cuda()
 
-        prediction = model(input,sigma)
+        with th.no_grad(): prediction = model(input,sigma)
         mse = criterion(prediction, target)
         psnr = 10 * log10(opt.cub**2 / mse.item())
         avg_psnr += psnr
