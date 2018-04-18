@@ -1473,7 +1473,7 @@ def wmad_estimator(x,wname='db7',mode='symmetric',multichannel=False):
     that the dimensions are B x C x H x W otherwise H x W x C x B, where H, W 
     are the spatial dimensions, C the image channels and B the number of images.
     It returns a torch tensor or an ndarray of size B x 1 (B x C if multichannel
-    is set to True) with the respective standard deviations."""
+    is set to True) with the respective estimated standard deviations."""
     from pywt import dwtn
     
     assert(isinstance(wname,str)),"The second input argument must be a string "\
