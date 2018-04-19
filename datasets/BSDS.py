@@ -180,7 +180,7 @@ class BSDS_v2(data.Dataset):
                                      self.stdn.astype(self.test_gt.dtype)[index//len(self.test_gt)]
 
             #obs = np.nan if self.test_obs is None else self.test_obs[index]
-            obs = self.test_obs
+            obs = self.test_obs[index]
             
         return img,target,noise_std,obs
     
