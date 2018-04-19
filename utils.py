@@ -1345,7 +1345,8 @@ def toc(tempBool=True):
     # Prints the time difference yielded by generator instance TicToc
     tempTimeInterval = next(TicToc)
     if tempBool:
-        print( "Elapsed time: %f seconds.\n" %tempTimeInterval )
+        #print("Elapsed time: {:f} seconds\n".format(tempTimeInterval))
+        return tempTimeInterval
 
 def tic():
     # Records a time in TicToc, marks the beginning of a time interval

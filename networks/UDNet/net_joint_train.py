@@ -10,7 +10,7 @@ Created on Wed Apr  4 22:32:58 2018
 import argparse
 from .net import UDNet
 from ...datasets.BSDS import BSDS
-from pydl.utils import formatInput2Tuple
+from pydl.utils import formatInput2Tuple,tic,toc
 
 import os.path
 import torch as th
@@ -283,7 +283,7 @@ def save_checkpoint(state):
     th.save(state, savePath)
     print("===> Checkpoint saved to {}".format(savePath))
 
-
+tic()
 epoch_loss = float('inf')
 for epoch in range(start+1, opt.nEpochs + 1):
     if opt.saveBest:
@@ -303,6 +303,5 @@ for epoch in range(start+1, opt.nEpochs + 1):
                  'optimizer_state_dict':optimizer.state_dict(),\
                  'rng_state':th.get_rng_state(),'params':params}
             save_checkpoint(state)
-    print("******************************************************")
-            
-print("\n ============ Training completed ======================\n")
+    print("******************************************************")    
+print("\n ============ Training completed in {:.4f} seconds ======================\n".format(toc()))

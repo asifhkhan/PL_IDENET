@@ -10,7 +10,7 @@ Created on Wed Apr  4 22:32:58 2018
 import argparse
 from .net import UDNet
 from ...datasets.BSDS import BSDS_v2 as BSDS
-from pydl.utils import formatInput2Tuple
+from pydl.utils import formatInput2Tuple,tic,toc
 
 import numpy as np
 import os.path
@@ -191,7 +191,7 @@ for i in range(opt.stages):
         opt.zeroMeanWeights,opt.rbf_start,opt.rbf_end,opt.data_min,\
         opt.data_max,opt.data_step,opt.alpha,opt.clb,opt.cub))
 
-    
+tic()    
 for stage in range(opt.stages):
     training_data_loader = DataLoader(dataset=train_set,num_workers=opt.threads,\
                                 batch_size=opt.batchSize,shuffle=True)
@@ -316,8 +316,7 @@ for stage in range(opt.stages):
                          'rng_state':th.get_rng_state()}
                 save_checkpoint(state)
         print("******************************************************")
-        
-    print("\n ============ Training of stage {} completed ======================\n".format(stage+1))
+    print("\n ============ Training of stage {} completed in {:.4f} seconds ======================\n".format(stage+1,toc()))
     
     # After the end of training for a particular stage we need to create a new 
     # train_set and test_set that corresponds to the output of this stage. This 
@@ -396,7 +395,7 @@ for stage in range(opt.stages):
     
 
     smodel.cpu()
-print("\n ============ Training completed ======================\n")
+print("\n ============ Training completed in {:4f} seconds ======================\n".format(toc()))
 
 
 def copyModelParams(model,listModel):
