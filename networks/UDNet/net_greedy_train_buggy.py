@@ -9,7 +9,7 @@ Created on Wed Apr  4 22:32:58 2018
 
 import argparse
 from .net import UDNet
-from ...datasets.BSDS import BSDS_v2 as BSDS
+from ...datasets.BSDS import BSDS
 from pydl.utils import formatInput2Tuple
 
 import numpy as np
@@ -173,8 +173,8 @@ if opt.cuda:
     th.cuda.manual_seed(opt.seed)
 
 print('===> Loading datasets')
-train_set = BSDS(opt.stdn,random_seed=opt.data_seed,filepath=opt.imdbPath,train=True,color=opt.color,shape=(180,180),im2Tensor=True,greedy_train=True)
-test_set = BSDS(opt.stdn,random_seed=opt.data_seed,filepath=opt.imdbPath,train=False,color=opt.color,shape=(180,180),im2Tensor=True,greedy_train=True)
+train_set = BSDS(opt.stdn,random_seed=opt.data_seed,filepath=opt.imdbPath,train=True,color=opt.color,shape=(180,180),im2Tensor=True)
+test_set = BSDS(opt.stdn,random_seed=opt.data_seed,filepath=opt.imdbPath,train=False,color=opt.color,shape=(180,180),im2Tensor=True)
 
 Ntrain, Nchannels, H, W  = train_set.train_gt.shape # dimensions of train_gt tensor
 Ntest = len(test_set.test_gt) # Number of unique images used in the test_set
@@ -247,19 +247,14 @@ for stage in range(opt.stages):
         scheduler.step()
         epoch_loss = 0
         for iteration, batch in enumerate(training_data_loader, 1):
-            stage_input, target, sigma, net_input = batch[0], batch[1], batch[2], batch[3]
+            input, target, sigma = batch[0], batch[1], batch[2]
             if opt.cuda:
-                stage_input = stage_input.cuda()
-                if net_input is not None:
-                    net_input = net_input.cuda()
+                input = input.cuda()
                 target = target.cuda()
                 sigma = sigma.cuda()
 
             optimizer.zero_grad()
-            if net_input is not None:
-                loss = criterion(smodel(input,sigma,net_input), target)
-            else:
-                loss = criterion(smodel(input,sigma), target)
+            loss = criterion(smodel(input,sigma), target)
             epoch_loss += loss.item()
             loss.backward()
             optimizer.step()
@@ -275,18 +270,13 @@ for stage in range(opt.stages):
     def test():
         avg_psnr = 0
         for batch in testing_data_loader:
-            stage_input, target, sigma, net_input = batch[0], batch[1], batch[2], batch[3]
+            input, target, sigma = batch[0], batch[1], batch[2]
             if opt.cuda:
-                stage_input = stage_input.cuda()
-                if net_input is not None:
-                    net_input = net_input.cuda()                    
+                input = input.cuda()
                 target = target.cuda()
                 sigma = sigma.cuda()
-            
-            if net_input is not None:
-                with th.no_grad(): prediction = smodel(input,sigma,net_input)
-            else:
-                with th.no_grad(): prediction = smodel(input,sigma)
+
+            with th.no_grad(): prediction = smodel(input,sigma)
             mse = criterion(prediction, target)
             psnr = 10 * log10(opt.cub**2 / mse.item())
             avg_psnr += psnr
@@ -360,13 +350,12 @@ for stage in range(opt.stages):
         smodel.bbProj.max_val = float('+inf')
         output = np.ndarray(0)
         for batch in full_data_loader:
-            stage_input, sigma, net_input = batch[0], batch[2], batch[3]
+            input,sigma = batch[0], batch[2]
             if opt.cuda:
-                stage_input = stage_input.cuda()
-                net_input = net_input.cuda()
+                input = input.cuda()
                 sigma = sigma.cuda()
             
-            with th.no_grad(): out = smodel(stage_input,sigma,net_input).cpu().numpy()
+            with th.no_grad(): out = smodel(input,sigma).cpu().numpy()
             output = np.concatenate((output,out),axis=0) if output.size else out
             
         
