@@ -110,7 +110,7 @@ class BSDS(data.Dataset):
 class BSDS_v2(data.Dataset):
     
     def __init__(self,stdn,random_seed=20180102,filepath='',train=True,\
-                 color=False,shape=(180,180),im2Tensor = True, greedy_train=False):
+                 color=False,shape=(180,180),im2Tensor = True):
         
         assert(isinstance(stdn,(float,tuple))),"stdn is expected to be either "\
         +"a float or a tuple"
@@ -123,7 +123,6 @@ class BSDS_v2(data.Dataset):
         self.stdn = np.asarray(stdn) 
         self.train = train
         self.rng = np.random.RandomState(random_seed)
-        self.greedy_train = greedy_train
         
         if im2Tensor:
             fshape = (3,2,0,1)
@@ -143,7 +142,7 @@ class BSDS_v2(data.Dataset):
                                     shape=shape,data ='train').transpose(fshape)
             
             self.train_data = self.generate_NoisyData()
-            self.train_obs = None
+            self.train_obs = self.train_data
         else:
             if os.path.isfile(filepath):
                 f = np.load(filepath)
@@ -157,7 +156,7 @@ class BSDS_v2(data.Dataset):
                                     shape=shape,data ='test').transpose(fshape)
             
             self.test_data = self.generate_NoisyData()
-            self.test_obs = None
+            self.test_obs = self.test_data
         
     def __getitem__(self, index):
         """
@@ -172,20 +171,17 @@ class BSDS_v2(data.Dataset):
             img, target, noise_std = self.train_data[index],\
                                      self.train_gt[index%len(self.train_gt)],\
                                      self.stdn.astype(self.train_gt.dtype)[index//len(self.train_gt)]
-            if self.greedy_train:
-                obs = self.train_obs[index]
-            else:
-                obs = None
-                
+            
+            #obs = np.nan if self.train_obs is None else self.train_obs[index]
+            obs = self.train_obs[index]   
         else:
             img, target, noise_std = self.test_data[index],\
                                      self.test_gt[index%len(self.test_gt)],\
                                      self.stdn.astype(self.test_gt.dtype)[index//len(self.test_gt)]
-            if self.greed_train:
-                obs = self.test_obs[index]
-            else:
-                obs = None
-        
+
+            #obs = np.nan if self.test_obs is None else self.test_obs[index]
+            obs = self.test_obs
+            
         return img,target,noise_std,obs
     
     def __len__(self):

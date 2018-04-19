@@ -173,11 +173,12 @@ if opt.cuda:
     th.cuda.manual_seed(opt.seed)
 
 print('===> Loading datasets')
-train_set = BSDS(opt.stdn,random_seed=opt.data_seed,filepath=opt.imdbPath,train=True,color=opt.color,shape=(180,180),im2Tensor=True,greedy_train=True)
-test_set = BSDS(opt.stdn,random_seed=opt.data_seed,filepath=opt.imdbPath,train=False,color=opt.color,shape=(180,180),im2Tensor=True,greedy_train=True)
+train_set = BSDS(opt.stdn,random_seed=opt.data_seed,filepath=opt.imdbPath,train=True,color=opt.color,shape=(180,180),im2Tensor=True)
+test_set = BSDS(opt.stdn,random_seed=opt.data_seed,filepath=opt.imdbPath,train=False,color=opt.color,shape=(180,180),im2Tensor=True)
 
 Ntrain, Nchannels, H, W  = train_set.train_gt.shape # dimensions of train_gt tensor
 Ntest = len(test_set.test_gt) # Number of unique images used in the test_set
+NS = len(train_set.stdn) # Number of different noise levels used for training
 
 print('===> Building model')
 
@@ -250,16 +251,12 @@ for stage in range(opt.stages):
             stage_input, target, sigma, net_input = batch[0], batch[1], batch[2], batch[3]
             if opt.cuda:
                 stage_input = stage_input.cuda()
-                if net_input is not None:
-                    net_input = net_input.cuda()
+                net_input = net_input.cuda()
                 target = target.cuda()
                 sigma = sigma.cuda()
 
             optimizer.zero_grad()
-            if net_input is not None:
-                loss = criterion(smodel(input,sigma,net_input), target)
-            else:
-                loss = criterion(smodel(input,sigma), target)
+            loss = criterion(smodel(stage_input,sigma,net_input), target)
             epoch_loss += loss.item()
             loss.backward()
             optimizer.step()
@@ -278,15 +275,11 @@ for stage in range(opt.stages):
             stage_input, target, sigma, net_input = batch[0], batch[1], batch[2], batch[3]
             if opt.cuda:
                 stage_input = stage_input.cuda()
-                if net_input is not None:
-                    net_input = net_input.cuda()                    
+                net_input = net_input.cuda()                    
                 target = target.cuda()
                 sigma = sigma.cuda()
             
-            if net_input is not None:
-                with th.no_grad(): prediction = smodel(input,sigma,net_input)
-            else:
-                with th.no_grad(): prediction = smodel(input,sigma)
+            with th.no_grad(): prediction = smodel(stage_input,sigma,net_input)
             mse = criterion(prediction, target)
             psnr = 10 * log10(opt.cub**2 / mse.item())
             avg_psnr += psnr
@@ -333,23 +326,37 @@ for stage in range(opt.stages):
     # First we need to create a DataLoader for all the data from both the 
     # train_set and the test_set so that we can compute the output of the 
     # next stage.
+    
     if stage+1 < opt.stages:
         full_data = train_set.train_data
         test_data = test_set.test_data
-        full_data = np.concatenate((full_data.reshape((len(train_set.stdn),\
-            full_data.shape[0]//len(train_set.stdn))+full_data.shape[1:]),\
-            test_data.reshape((len(train_set.stdn),test_data.shape[0]//len(train_set.stdn))+\
+        full_data = np.concatenate((full_data.reshape((NS,\
+            full_data.shape[0]//NS)+full_data.shape[1:]),\
+            test_data.reshape((NS,test_data.shape[0]//NS)+\
                               test_data.shape[1:])),axis=1)
+        del test_data
         full_data = full_data.reshape((prod(full_data.shape[0:2]),)+full_data.shape[2:])
-  
-        full_gt = train_set.train_gt
-        test_gt = test_set.test_gt
-        full_gt = np.concatenate((full_gt,test_gt),axis = 0)
+                
+        full_obs = train_set.train_obs
+        test_obs = test_set.test_obs
+        full_obs = np.concatenate((full_obs.reshape((NS,\
+            full_obs.shape[0]//NS)+full_obs.shape[1:]),\
+            test_obs.reshape((NS,test_obs.shape[0]//NS)+\
+                              test_obs.shape[1:])),axis=1)
+        del test_obs
+        full_obs = full_obs.reshape((prod(full_obs.shape[0:2]),)+full_obs.shape[2:])        
+        
+        full_gt = np.concatenate((train_set.train_gt,test_set.test_gt),axis = 0)
+        
+#        if stage == 0:
+#            net_input_train = train_set.train_data
+#            net_input_test = test_set.test_data
     
         #Instead of creating a new BSDS dataset we use the train_set dataset
         # and change the neccessary class members
         train_set.train_data = full_data
         train_set.train_gt = full_gt
+        train_set.train_obs = full_obs
     
         full_data_loader = DataLoader(dataset=train_set,num_workers=opt.threads,\
                                   batch_size = opt.testBatchSize,shuffle=False)    
@@ -374,16 +381,18 @@ for stage in range(opt.stages):
         # both the train_set and the test_set we can create the new train_set
         # and test_set, respectively, that will be used to feed the next stage
         # of the network.
-        output = output.reshape((len(train_set.stdn),output.shape[0]//len(train_set.stdn))+\
-                                output.shape[1:])
+        output = output.reshape((NS,output.shape[0]//NS)+output.shape[1:])
         
-        train_set.train_data = output[:,0:Ntrain,...].\
-                                    reshape((len(train_set.stdn)*Ntrain,Nchannels,H,W))
-        train_set.train_gt = full_gt[0:Ntrain,...]
+        full_obs = full_obs.reshape((NS,full_obs[0]//NS)+full_obs.shape[1:])
         
-        test_set.test_data = output[:,Ntrain:,...].\
-                                    reshape((len(train_set.stdn)*Ntest,Nchannels,H,W))        
+        train_set.train_data = output[:,0:Ntrain,...].reshape((NS*Ntrain,Nchannels,H,W))
+        train_set.train_gt = full_gt[0:Ntrain,...]      
+        train_set.train_obs = full_obs[:,0:Ntrain,...].reshape((NS*Ntrain,Nchannels,H,W))
+        
+        test_set.test_data = output[:,Ntrain:,...].reshape((NS*Ntest,Nchannels,H,W))        
         test_set.test_gt = full_gt[Ntrain:,...]
+        test_set.train_obs = full_obs[:,Ntrain:,...].reshape((NS*Ntest,Nchannels,H,W))
+        
     
 
     smodel.cpu()
