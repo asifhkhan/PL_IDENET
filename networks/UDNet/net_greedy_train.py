@@ -382,7 +382,7 @@ for stage in range(opt.stages):
         # of the network.
         output = output.reshape((NS,output.shape[0]//NS)+output.shape[1:])
         
-        full_obs = full_obs.reshape((NS,full_obs[0]//NS)+full_obs.shape[1:])
+        full_obs = full_obs.reshape((NS,full_obs.shape[0]//NS)+full_obs.shape[1:])
         
         train_set.train_data = output[:,0:Ntrain,...].reshape((NS*Ntrain,Nchannels,H,W))
         train_set.train_gt = full_gt[0:Ntrain,...]      
