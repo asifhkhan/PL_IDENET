@@ -391,7 +391,7 @@ for stage in range(opt.stages):
         
         test_set.test_data = output[:,Ntrain:,...].reshape((NS*Ntest,Nchannels,H,W))        
         test_set.test_gt = full_gt[Ntrain:,...]
-        test_set.train_obs = full_obs[:,Ntrain:,...].reshape((NS*Ntest,Nchannels,H,W))
+        test_set.test_obs = full_obs[:,Ntrain:,...].reshape((NS*Ntest,Nchannels,H,W))
         
     
 
