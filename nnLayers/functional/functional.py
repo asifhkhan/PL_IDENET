@@ -10,7 +10,7 @@ Created on Fri Mar  2 11:33:22 2018
 import torch as th
 #import numpy as np
 import math
-from ... import utils
+from pydl import utils
 
 
 class WeightNormalization(th.autograd.Function):
@@ -383,7 +383,7 @@ class L2Proj(th.autograd.Function):
                         
         return grad_input,grad_alpha,None
     
-class ImLoss(th.autograd.Function) :
+class imLoss(th.autograd.Function) :
     r"""  Y = IMLOSS(X, Xgt) computes the loss incurred by the estimated
     images X given the ground-truth images Xgt.
 

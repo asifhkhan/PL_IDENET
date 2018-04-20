@@ -7,7 +7,7 @@ Created on Thu Mar 29 17:02:19 2018
 @email : s.lefkimmatis@skoltech.ru
 """
 import torch as th
-from .. import utils
+from pydl import utils
 
 def dct(tensor):
     r"""Initializes the input tensor with weights from the dct basis or dictionary."""

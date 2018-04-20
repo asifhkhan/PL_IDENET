@@ -8,8 +8,8 @@ Created on Wed Apr 11 22:32:58 2018
 """
 
 import argparse
-from .net import ResDNet
-from ...datasets.BSDS import BSDS
+from pydl.networks.ResDNet.net import ResDNet
+from pydl.datasets.BSDS import BSDS
 from pydl.utils import formatInput2Tuple,tic,toc
 
 import os.path

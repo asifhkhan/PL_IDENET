@@ -8,9 +8,10 @@ Created on Wed Apr  4 22:32:58 2018
 """
 
 import argparse
-from .net import UDNet
-from ...datasets.BSDS import BSDS_v2 as BSDS
+from pydl.networks.UDNet.net import UDNet
+from pydl.datasets.BSDS import BSDS_v2 as BSDS
 from pydl.utils import formatInput2Tuple,tic,toc
+from pydl.nnLayers.modules import PSNRLoss
 
 import numpy as np
 import os.path
@@ -198,7 +199,8 @@ for stage in range(opt.stages):
     testing_data_loader = DataLoader(dataset=test_set,num_workers=opt.threads,\
                                 batch_size=opt.testBatchSize,shuffle=False)
     
-    criterion = nn.MSELoss(size_average=True,reduce=True)
+    #criterion = nn.MSELoss(size_average=True,reduce=True)
+    criterion = PSNRLoss(peakval = opt.cub)
     stagePath = os.path.join(dirPath,'stage'+str(stage+1))
     os.makedirs(stagePath,exist_ok = True)
     smodel = Lmodel[stage]
@@ -261,11 +263,15 @@ for stage in range(opt.stages):
             loss.backward()
             optimizer.step()
 
+#            print("===> train:: Stage[{}]: Epoch[{}]({}/{}): PSNR: {:.4f} dB"\
+#                  .format(stage+1,epoch,iteration, len(training_data_loader),10*log10(opt.cub**2/loss.item())))
             print("===> train:: Stage[{}]: Epoch[{}]({}/{}): PSNR: {:.4f} dB"\
-                  .format(stage+1,epoch,iteration, len(training_data_loader),10*log10(opt.cub**2/loss.item())))
+                  .format(stage+1,epoch,iteration, len(training_data_loader),-loss.item()/len(stage_input)))
 
+#        print("===> train:: Stage[{}]: Epoch[{}] Complete: Avg. PSNR: {:.4f} dB"\
+#              .format(stage+1,epoch,10*log10(opt.cub**2/(epoch_loss / len(training_data_loader)))))
         print("===> train:: Stage[{}]: Epoch[{}] Complete: Avg. PSNR: {:.4f} dB"\
-              .format(stage+1,epoch,10*log10(opt.cub**2/(epoch_loss / len(training_data_loader)))))
+              .format(stage+1,epoch,-epoch_loss/(Ntrain*NS)))            
         return epoch_loss
 
 
@@ -280,12 +286,15 @@ for stage in range(opt.stages):
                 sigma = sigma.cuda()
             
             with th.no_grad(): prediction = smodel(stage_input,sigma,net_input)
-            mse = criterion(prediction, target)
-            psnr = 10 * log10(opt.cub**2 / mse.item())
+#            mse = criterion(prediction, target)
+#            psnr = 10 * log10(opt.cub**2 / mse.item())
+            psnr = criterion(prediction,target)
             avg_psnr += psnr
             
+#        print("===> val:: Stage[{}]: Avg. PSNR: {:.4f} dB".format(stage+1,\
+#                                          avg_psnr/len(testing_data_loader)))           
         print("===> val:: Stage[{}]: Avg. PSNR: {:.4f} dB".format(stage+1,\
-                                          avg_psnr/len(testing_data_loader)))           
+                                          -avg_psnr/(Ntest*NS)))                   
 
     def save_checkpoint(state):    
         if opt.saveBest:
@@ -395,7 +404,7 @@ for stage in range(opt.stages):
     
 
     smodel.cpu()
-print("\n ============ Training completed in {:4f} seconds ======================\n".format(toc()))
+print("\n ============ Training completed ======================\n")
 
 
 def copyModelParams(model,listModel):

@@ -8,8 +8,8 @@ Created on Sun Mar 25 22:50:33 2018
 """
 
 import torch as th
-from .functional import functional as F
-from .. utils import formatInput2Tuple, getPad2RetainShape
+from pydl.nnLayers.functional import functional as F
+from pydl.utils import formatInput2Tuple, getPad2RetainShape
 
 pad2D = F.Pad2D.apply
 pad_transpose2D = F.Pad_transpose2D.apply

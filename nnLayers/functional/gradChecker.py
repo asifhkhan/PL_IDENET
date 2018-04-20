@@ -10,7 +10,7 @@ Created on Mon Mar  5 08:20:50 2018
 import numpy as np
 import torch as th
 from torch.autograd import Variable
-from . import functional
+from pydl.nnLayers.functional import functional
 
 def symmetricPad2D(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False):
     symmetricPad2DF = functional.SymmetricPad2D.apply

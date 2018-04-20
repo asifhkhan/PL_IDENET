@@ -8,8 +8,8 @@ Created on Wed Apr  4 22:32:58 2018
 """
 
 import argparse
-from .net import UDNet
-from ...datasets.BSDS import BSDS
+from pydl.networks.UDNet.net import UDNet
+from pydl.datasets.BSDS import BSDS
 from pydl.utils import formatInput2Tuple,tic,toc
 
 import os.path

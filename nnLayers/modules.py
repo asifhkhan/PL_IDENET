@@ -9,9 +9,10 @@ Created on Wed Mar 28 23:49:14 2018
 
 import torch as th
 from torch import nn
-from . import cascades
-from . import init
-from .. utils import formatInput2Tuple, getPad2RetainShape
+from pydl.nnLayers import cascades
+from pydl.nnLayers.functional.functional import imLoss
+from pydl.nnLayers import init
+from pydl.utils import formatInput2Tuple, getPad2RetainShape
 #from collections import OrderedDict
 
 #from functools import reduce
@@ -413,3 +414,22 @@ class NConv_transpose2D(nn.Module):
             + ', pad = ' + str(self.pad)\
             + ', normalizedWeights = ' + str(self.normalizedWeights) \
             + ', zeroMeanWeights = ' + str(self.zeroMeanWeights) + ')'
+
+
+class PSNRLoss(nn.Module):
+    
+    def __init__(self,peakval=255):
+        
+        super(PSNRLoss,self).__init__()       
+        
+        self.peakval = peakval
+        self.loss = 'psnr'
+        self.mode = 'normal'
+        
+    def forward(self,input,other):
+        
+        return imLoss.apply(input,other,self.peakval,self.loss,self.mode) 
+    
+    def __repr__(self):
+        return self.__class__.__name__ + '(' \
+            + 'peakVal = ' + str(self.peakval) + ')'    

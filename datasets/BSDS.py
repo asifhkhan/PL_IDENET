@@ -10,7 +10,7 @@ Created on Mon Apr  2 22:58:26 2018
 import os
 import numpy as np
 import torch.utils.data as data
-from .. utils import gen_imdb_BSDS500_fromList
+from pydl.utils import gen_imdb_BSDS500_fromList
 
 class BSDS(data.Dataset):
     
