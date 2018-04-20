@@ -199,6 +199,7 @@ test_set = BSDS(opt.stdn,random_seed=opt.data_seed,filepath=opt.imdbPath,train=F
 training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize, shuffle=True)
 testing_data_loader = DataLoader(dataset=test_set, num_workers=opt.threads, batch_size=opt.testBatchSize, shuffle=False)
 
+Ntrain, Ntest, NS = len(train_set.train_gt), len(test_set.test_gt), len(train_set.stdn)
 
 print('===> Building model')
 
@@ -286,9 +287,11 @@ def train(epoch):
         loss.backward()
         optimizer.step()
 
-        print("===> train:: Epoch[{}]({}/{}): PSNR: {:.4f} dB".format(epoch, iteration, len(training_data_loader),10*log10(opt.cub**2/loss.item())))
+#        print("===> train:: Epoch[{}]({}/{}): PSNR: {:.4f} dB".format(epoch, iteration, len(training_data_loader),10*log10(opt.cub**2/loss.item())))
+        print("===> train:: Epoch[{}]({}/{}): PSNR: {:.4f} dB".format(epoch, iteration, len(training_data_loader),-loss.item()/len(input)))
 
-    print("===> train:: Epoch[{}] Complete: Avg. PSNR: {:.4f} dB".format(epoch, 10*log10(opt.cub**2/(epoch_loss / len(training_data_loader)))))
+#    print("===> train:: Epoch[{}] Complete: Avg. PSNR: {:.4f} dB".format(epoch, 10*log10(opt.cub**2/(epoch_loss / len(training_data_loader)))))
+    print("===> train:: Epoch[{}] Complete: Avg. PSNR: {:.4f} dB".format(epoch, -epoch_loss/(Ntrain*NS)))        
     return epoch_loss
 
 
@@ -302,10 +305,12 @@ def test():
             sigma = sigma.cuda()
 
         with th.no_grad(): prediction = model(input,sigma)
-        mse = criterion(prediction, target)
-        psnr = 10 * log10(opt.cub**2 / mse.item())
-        avg_psnr += psnr
-    print("===> val:: Avg. PSNR: {:.4f} dB".format(avg_psnr / len(testing_data_loader)))
+#        mse = criterion(prediction, target)
+#        psnr = 10 * log10(opt.cub**2 / mse.item())
+        psnr = criterion(prediction, target)
+        avg_psnr += psnr.item()
+#    print("===> val:: Avg. PSNR: {:.4f} dB".format(avg_psnr / len(testing_data_loader)))
+    print("===> val:: Avg. PSNR: {:.4f} dB".format(-avg_psnr/(Ntest*NS)))        
 
 
 def save_checkpoint(state):    

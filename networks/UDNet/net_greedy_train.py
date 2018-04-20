@@ -21,7 +21,7 @@ import torch.optim as optim
 #from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
-from math import log10
+#from math import log10
 from re import match as pattern_match
 from functools import reduce
 from collections import OrderedDict
@@ -289,7 +289,7 @@ for stage in range(opt.stages):
 #            mse = criterion(prediction, target)
 #            psnr = 10 * log10(opt.cub**2 / mse.item())
             psnr = criterion(prediction,target)
-            avg_psnr += psnr
+            avg_psnr += psnr.item()
             
 #        print("===> val:: Stage[{}]: Avg. PSNR: {:.4f} dB".format(stage+1,\
 #                                          avg_psnr/len(testing_data_loader)))           
