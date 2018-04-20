@@ -11,15 +11,16 @@ import argparse
 from pydl.networks.ResDNet.net import ResDNet
 from pydl.datasets.BSDS import BSDS
 from pydl.utils import formatInput2Tuple,tic,toc
+from pydl.nnLayers.modules import PSNRLoss
 
 import os.path
 import torch as th
-import torch.nn as nn
+#import torch.nn as nn
 import torch.optim as optim
 #from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
-from math import log10
+#from math import log10
 from re import match as pattern_match
 from collections import OrderedDict
 
@@ -226,7 +227,8 @@ if opt.initModelPath != '':
     model.load_state_dict(state['model_state_dict'])
     opt.resume = False
 
-criterion = nn.MSELoss(size_average=True,reduce=True)
+#criterion = nn.MSELoss(size_average=True,reduce=True)
+criterion = PSNRLoss(peakval=opt.cub)
 
 optimizer = optim.Adam(model.parameters(), lr=opt.lr, betas=(0.9, 0.999), eps=1e-04)
 

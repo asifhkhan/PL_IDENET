@@ -15,12 +15,12 @@ from pydl.nnLayers.modules import PSNRLoss
 
 import os.path
 import torch as th
-import torch.nn as nn
+#import torch.nn as nn
 import torch.optim as optim
 #from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import MultiStepLR
-from math import log10
+#from math import log10
 from re import match as pattern_match
 from collections import OrderedDict
 
