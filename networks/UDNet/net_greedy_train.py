@@ -185,12 +185,19 @@ print('===> Building model')
 
 
 Lmodel = nn.ModuleList()
+
+params = OrderedDict(kernel_size=opt.kernel_size,input_channels=input_channels,\
+         output_features=output_features,rbf_mixtures=opt.rbf_mixtures,\
+         rbf_precision=opt.rbf_precision,stages=1,pad=opt.pad,\
+         padType=opt.padType,convWeightSharing=opt.convWeightSharing,\
+         scale_f=opt.scale_f,scale_t=opt.scale_t,normalizedWeights=\
+         opt.normalizedWeights,zeroMeanWeights=opt.zeroMeanWeights,rbf_start=\
+         opt.rbf_start,rbf_end=opt.rbf_end,data_min=opt.data_min,data_max=\
+         opt.data_max,data_step=opt.data_step,alpha=opt.alpha,clb=opt.clb,\
+         cub=opt.cub)
+
 for i in range(opt.stages):
-    Lmodel.append(UDNet(opt.kernel_size,input_channels,output_features,\
-        opt.rbf_mixtures,opt.rbf_precision,1,opt.pad,opt.padType,\
-        opt.convWeightSharing,opt.scale_f,opt.scale_t,opt.normalizedWeights,\
-        opt.zeroMeanWeights,opt.rbf_start,opt.rbf_end,opt.data_min,\
-        opt.data_max,opt.data_step,opt.alpha,opt.clb,opt.cub))
+    Lmodel.append(UDNet(*params.values()))
 
 tic()    
 for stage in range(opt.stages):
@@ -317,12 +324,12 @@ for stage in range(opt.stages):
                 epoch_loss = epoch_loss_new    
                 state = {'epoch':epoch, 'model_state_dict':smodel.state_dict(),\
                          'optimizer_state_dict':optimizer.state_dict(),\
-                         'rng_state':th.get_rng_state()}
+                         'rng_state':th.get_rng_state(),'params':params}
                 save_checkpoint(state)
             elif not opt.saveBest:
                 state = {'epoch':epoch, 'model_state_dict':smodel.state_dict(),\
                          'optimizer_state_dict':optimizer.state_dict(),\
-                         'rng_state':th.get_rng_state()}
+                         'rng_state':th.get_rng_state(),'params':params}
                 save_checkpoint(state)
         print("******************************************************")
     print("\n ============ Training of stage {} completed in {:.4f} seconds ======================\n".format(stage+1,toc()))
@@ -418,40 +425,16 @@ def copyModelParams(model,listModel):
         for i,j in zip(skeys,lkeys):
             model.state_dict()[i].copy_(listModel[stage].state_dict()[j])
 
-#mkeys = list(model.state_dict().keys())
-#    
-#for stage in range(model.stages):
-#    skeys = [key for key in mkeys if key.find('.'+str(stage)+'.') != -1]
-#    lkeys = list(listModel[stage].state_dict().keys())
-#    for i,j in zip(skeys,lkeys):
-#        print('model.state_dict()[{}].copy_(listModel[{}].state_dict()[{}])\n'.format(i,stage,j))
-
-# Create a model of opt.stages
-model = UDNet(opt.kernel_size,input_channels,output_features,\
-        opt.rbf_mixtures,opt.rbf_precision,opt.stages,opt.pad,opt.padType,\
-        opt.convWeightSharing,opt.scale_f,opt.scale_t,opt.normalizedWeights,\
-        opt.zeroMeanWeights,opt.rbf_start,opt.rbf_end,opt.data_min,\
-        opt.data_max,opt.data_step,opt.alpha,opt.clb,opt.cub)
-
-#if opt.cuda:
-#    Lmodel = Lmodel.cpu()
+# Create a model of opt.stages that will constist of all the independently 
+# trained stages
+params['stages'] = opt.stages            
+model = UDNet(*params.values())
 
 # Copy the parameters of each 1-stage network to the correct stage of the newly
 # created model.
 copyModelParams(model,Lmodel)
-
     
 # Save the final model 
-params = OrderedDict(kernel_size=opt.kernel_size,input_channels=input_channels,\
-         output_features=output_features,rbf_mixtures=opt.rbf_mixtures,\
-         rbf_precision=opt.rbf_precision,stages=opt.stages,pad=opt.pad,\
-         padType=opt.padType,convWeightSharing=opt.convWeightSharing,\
-         scale_f=opt.scale_f,scale_t=opt.scale_t,normalizedWeights=\
-         opt.normalizedWeights,zeroMeanWeights=opt.zeroMeanWeights,rbf_start=\
-         opt.rbf_start,rbf_end=opt.rbf_end,data_min=opt.data_min,data_max=\
-         opt.data_max,data_step=opt.data_step,alpha=opt.alpha,clb=opt.clb,\
-         cub=opt.cub)
-
 state = {'params':params,\
          'model_state_dict':model.state_dict(),\
          'rng_state':th.get_rng_state()}
