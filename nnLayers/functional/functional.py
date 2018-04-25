@@ -247,7 +247,7 @@ class L2Prox(th.autograd.Function):
    projected onto DLDY. DLDX has the same dimensions as X and DLDA the same 
    dimensions as ALPHA.
     
-   DLDX = K ( I - (X-D)*(X-D)^T/ max(||X-D||,EPSILON)^2) * R) * DLDY
+   DLDX = K ( I - (X-Z)*(X-Z)^T/ max(||X-Z||,EPSILON)^2) * R) * DLDY
    
    where R = (sgn(||X-Z||-epsilon)+1)/2
 
@@ -307,7 +307,91 @@ class L2Prox(th.autograd.Function):
             grad_input -= diff.mul(ip)         
                         
         return grad_input,None,grad_alpha,None
+
+class SVL2Prox(th.autograd.Function):
+    r""" Y = SVL2PROX(X,Z,S,ALPHA) computes the proximal map layer for the 
+   indicator function that involves the covariance matrix S of spatially 
+   variant noise:
+
+                        { 0 if ||S(Y-Z)|| <= EPSILON
+   i_C(Z,S,EPSILON){Y}= {
+                        { +inf if ||S(Y-Z)|| > EPSILON
+
+   X, Z and Y are tensors of size N x C x H x W, ALPHA is a scalar tensor, 
+   S is either a scalar tensor, a tensor with N elements or a tensor with
+   the same dimensions as X. In any of these cases its values correspond to the
+   standard deivation of the noise. Alternatively, it can be a function that 
+   applies to X the square root of the inverse covariance matrix of the noise.
+   EPSILON = exp(ALPHA)*V, where V = sqrt(H*W*C-1).
+  
+   Y = Z + K* (X-Z) where K = EPSILON / max(||S(X-Z)||,EPSILON);
+
+   DLDX, DLDA = SVL2PROX.backward(DLDY) computes the derivatives of the block 
+   projected onto DLDY. DLDX has the same dimensions as X and DLDA the same 
+   dimensions as ALPHA.
+    
+   DLDX = K ( I - S(S(X-D)*(X-D)^T/ max(||X-D||,EPSILON)^2) * R) * DLDY
+   
+   where R = (sgn(||X-Z||-epsilon)+1)/2
+
+   DLDA = B*(X-Z)^T*DLDY
+
+   where B = [ EPSILON *{ 2*max(||X-Z||,EPSILON)-
+   EPSILON*(1-sgn(||X-Z||-EPSILON)) } ] / [ 2*max(||X-Z||,EPSILON)^2 ]"""    
+
+    @staticmethod
+    def forward(ctx,input,other,alpha,stdn):
+        assert(input.dim() == 4 and other.dim() == 4), \
+            "Input and other are expected to be 4-D tensors."
+        assert(alpha is None or alpha.numel() == 1), "alpha needs to be "\
+        "either None or a tensor of size 1."
+                
+        N = math.sqrt(input[0].numel()-1)
+        batch = input.size(0)
         
+        assert(stdn.numel() == 1 or stdn.numel() == batch), \
+            "stdn must be either a tensor of size one or a tensor of size "\
+            "equal to the batch number."
+        assert(all(stdn > 0)), "The noise standard deviations must be positive."
+        
+        stdn = stdn.view(-1,1,1,1)
+        
+        if alpha is None:
+            alpha = th.Tensor([0]).type_as(stdn)
+            
+        epsilon = stdn.mul(alpha.exp())*N
+        
+        diff = input.add(-other)
+        diff_norm = diff.view(batch,-1).norm(p=2,dim = 1).view(batch,1,1,1)
+        max_norm = diff_norm.max(epsilon)
+        
+        ctx.save_for_backward(diff,diff_norm,max_norm,epsilon)
+        
+        return other + diff.mul(epsilon).div(max_norm)
+            
+    @staticmethod
+    def backward(ctx,grad_output):
+        grad_input = grad_alpha = None
+        
+        diff,diff_norm,max_norm,epsilon = ctx.saved_variables
+        batch = grad_output.size(0)
+
+        if ctx.needs_input_grad[2]:
+            k = epsilon.div(diff_norm)
+            k[k >= 1] = 0
+            grad_alpha = grad_output.mul(diff).mul(k).sum()
+            
+        if ctx.needs_input_grad[0]:
+            r = (utils.signum(diff_norm-epsilon)+1)/2
+            r = r.div(max_norm.pow(2))
+            grad_input = grad_output.mul(epsilon.div(max_norm))
+            ip = grad_input.mul(diff).view(batch,-1).sum(1).view(-1,1,1,1)
+            ip = ip.mul(r)
+            grad_input -= diff.mul(ip)         
+                        
+        return grad_input,None,grad_alpha,None
+
+
 class L2Proj(th.autograd.Function):
     r""" Y = L2PROJ(X,STDN,ALPHA) computes the projection layer for the 
    indicator function :
