@@ -143,6 +143,68 @@ def l2Proj(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False):
     return err_x, x_var.grad.data, x_numgrad, err_a, alpha_var.grad.data, alpha_numgrad
 
 
+def SVl2Proj(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False):
+    
+    SVl2ProjF = functional.SVL2Proj.apply
+    
+    x = th.randn(2,3,30,30).type(dtype)
+    x -= x.view(x.size(0),-1).min().view(-1,1,1,1)
+    x /= x.view(x.size(0),-1).max().view(-1,1,1,1) 
+    x = x*255
+    alpha  = th.Tensor(np.random.randint(0,3,(1,))).type(dtype)
+    stdn = th.Tensor(np.random.randint(5,20,(x.numel(),1))).type(dtype)
+    stdn = stdn.view_as(x).contiguous()
+    
+    if GPU and th.cuda.is_available():
+        x = x.cuda()
+        alpha = alpha.cuda()
+        stdn = stdn.cuda()
+    
+    sz_x = x.size()
+    grad_output = th.randn_like(x)
+    x_numgrad = th.zeros_like(x).view(-1)
+    perturb = x_numgrad.clone() 
+    cost = lambda input: cost_SVl2Proj(input,alpha,stdn,grad_output)
+        
+    for k in range(0,x.numel()):
+        perturb[k]  = epsilon
+        loss1 = cost(x.view(-1).add(perturb).view(sz_x))
+        loss2 = cost(x.view(-1).add(-perturb).view(sz_x))
+        x_numgrad[k] = (loss1-loss2)/(2*perturb[k])
+        perturb[k] = 0
+
+    x_numgrad = x_numgrad.view(sz_x)
+    
+    sz_alpha = alpha.size()
+    alpha_numgrad = th.zeros_like(alpha).view(-1)
+    perturb = alpha_numgrad.clone()
+    cost = lambda input : cost_SVl2Proj(x,input,stdn,grad_output)
+    
+    for k in range(0,alpha.numel()):
+        perturb[k]  = epsilon
+        loss1 = cost(alpha.view(-1).add(perturb).view(sz_alpha))
+        loss2 = cost(alpha.view(-1).add(-perturb).view(sz_alpha))
+        alpha_numgrad[k] = (loss1-loss2)/(2*perturb[k])
+        perturb[k] = 0    
+    
+    alpha_numgrad = alpha_numgrad.view(sz_alpha)
+    
+    x_var = Variable(x,requires_grad = True)
+    alpha_var = Variable(alpha,requires_grad = True)
+    
+    y = SVl2ProjF(x_var,alpha_var,stdn)
+    y.backward(grad_output)
+    
+    err_x = th.norm(x_var.grad.data.view(-1) - x_numgrad.view(-1))/\
+            th.norm(x_var.grad.data.view(-1) + x_numgrad.view(-1))
+            
+    err_a = th.norm(alpha_var.grad.data.view(-1) - alpha_numgrad.view(-1))/\
+            th.norm(alpha_var.grad.data.view(-1) + alpha_numgrad.view(-1))            
+    
+    
+    return err_x, x_var.grad.data, x_numgrad, err_a, alpha_var.grad.data, alpha_numgrad
+
+
 def l2Prox(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False):
     
     l2ProxF = functional.L2Prox.apply
@@ -197,6 +259,74 @@ def l2Prox(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False):
     alpha_var = Variable(alpha,requires_grad = True)
     
     y = l2ProxF(x_var,z,alpha_var,stdn)
+    y.backward(grad_output)
+    
+    err_x = th.norm(x_var.grad.data.view(-1) - x_numgrad.view(-1))/\
+            th.norm(x_var.grad.data.view(-1) + x_numgrad.view(-1))
+            
+    err_a = th.norm(alpha_var.grad.data.view(-1) - alpha_numgrad.view(-1))/\
+            th.norm(alpha_var.grad.data.view(-1) + alpha_numgrad.view(-1))            
+    
+    
+    return err_x, x_var.grad.data, x_numgrad, err_a, alpha_var.grad.data, alpha_numgrad
+
+
+def SVl2Prox(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False):
+    
+    SVl2ProxF = functional.SVL2Prox.apply
+    
+    x = th.randn(2,3,30,30).type(dtype)
+    x -= x.view(x.size(0),-1).min().view(-1,1,1,1)
+    x /= x.view(x.size(0),-1).max().view(-1,1,1,1) 
+    x = x*255
+    z = th.randn_like(x)
+    z -= z.view(z.size(0),-1).min().view(-1,1,1,1)
+    z /= z.view(z.size(0),-1).max().view(-1,1,1,1) 
+    z = z*255    
+    alpha  = th.Tensor(np.random.randint(0,3,(1,))).type(dtype)
+    stdn = th.Tensor(np.random.randint(5,20,(x.numel(),1))).type(dtype)
+    stdn = stdn.view_as(x).contiguous()
+    
+    if GPU and th.cuda.is_available():
+        x = x.cuda()
+        z = z.cuda()
+        alpha = alpha.cuda()
+        stdn = stdn.cuda()
+    
+    sz_x = x.size()
+    grad_output = th.randn_like(x)
+    x_numgrad = th.zeros_like(x).view(-1)
+    perturb = x_numgrad.clone() 
+    cost = lambda input: cost_SVl2Prox(input,z,alpha,stdn,grad_output)
+        
+    for k in range(0,x.numel()):
+        perturb[k]  = epsilon
+        loss1 = cost(x.view(-1).add(perturb).view(sz_x))
+        loss2 = cost(x.view(-1).add(-perturb).view(sz_x))
+        x_numgrad[k] = (loss1-loss2)/(2*perturb[k])
+        perturb[k] = 0
+        print("{}\n".format(k))
+
+    x_numgrad = x_numgrad.view(sz_x)
+    
+    sz_alpha = alpha.size()
+    alpha_numgrad = th.zeros_like(alpha).view(-1)
+    perturb = alpha_numgrad.clone()
+    cost = lambda input : cost_SVl2Prox(x,z,input,stdn,grad_output)
+    
+    for k in range(0,alpha.numel()):
+        perturb[k]  = epsilon
+        loss1 = cost(alpha.view(-1).add(perturb).view(sz_alpha))
+        loss2 = cost(alpha.view(-1).add(-perturb).view(sz_alpha))
+        alpha_numgrad[k] = (loss1-loss2)/(2*perturb[k])
+        perturb[k] = 0            
+    
+    alpha_numgrad = alpha_numgrad.view(sz_alpha)
+    
+    x_var = Variable(x,requires_grad = True)
+    alpha_var = Variable(alpha,requires_grad = True)
+    
+    y = SVl2ProxF(x_var,z,alpha_var,stdn)
     y.backward(grad_output)
     
     err_x = th.norm(x_var.grad.data.view(-1) - x_numgrad.view(-1))/\
@@ -331,7 +461,7 @@ def weightNormalization(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False,\
 
 def imloss(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False,loss='psnr',peakVal=255):
     
-    imlossF = functional.ImLoss.apply
+    imlossF = functional.imLoss.apply
     
     x = th.randn(4,3,40,40).abs().type(dtype)
     x = x.div(x.max())*peakVal
@@ -383,8 +513,18 @@ def cost_l2Proj(x,alpha,stdn,weights):
     out = F(x,alpha,stdn)
     return out.mul(weights).sum()
 
+def cost_SVl2Proj(x,alpha,stdn,weights):
+    F = functional.SVL2Proj.apply
+    out = F(x,alpha,stdn)
+    return out.mul(weights).sum()
+
 def cost_l2Prox(x,z,alpha,stdn,weights):
     F = functional.L2Prox.apply
+    out = F(x,z,alpha,stdn)
+    return out.mul(weights).sum()
+
+def cost_SVl2Prox(x,z,alpha,stdn,weights):
+    F = functional.SVL2Prox.apply
     out = F(x,z,alpha,stdn)
     return out.mul(weights).sum()
 
@@ -399,6 +539,6 @@ def cost_weightNormalization(x,alpha,normalizedWeights,zeroMeanWeights,weights):
     return out.mul(weights).sum()
 
 def cost_imloss(x,y,loss,peakVal):
-    F = functional.ImLoss.apply
+    F = functional.imLoss.apply
     out = F(x,y,peakVal,loss)
     return out

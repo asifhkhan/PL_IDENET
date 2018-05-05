@@ -48,7 +48,9 @@ class WeightNormalization(th.autograd.Function):
         else:
             w_norm = th.ones(1).type(out.type())
         
-        ctx.save_for_backward(out,alpha,w_norm)
+        # No need to save the variables during inference
+        if ctx.needs_input_grad[0] or ctx.needs_input_grad[1]:
+            ctx.save_for_backward(out,alpha,w_norm)
                 
         # Normalize the filters so that each one has an l2-norm equal to alpha
         return out.div(w_norm).mul(alpha)
@@ -96,8 +98,10 @@ class Pad2D(th.autograd.Function):
     def forward(ctx,input,pad,padType = 'zero'):
         assert(input.dim() == 4), "The dimensions of the input tensor are "\
         +"expected to be equal to 4."
-            
-        ctx.intermediate = pad,padType
+        
+        # No need to save the variables during inference
+        if ctx.needs_input_grad[0]:            
+            ctx.intermediate = pad,padType
             
         return utils.pad2D(input,pad,padType)
 
@@ -117,8 +121,10 @@ class Pad_transpose2D(th.autograd.Function):
     def forward(ctx,input,pad,padType = 'zero'):
         assert(input.dim() == 4), "The dimensions of the input tensor are "\
         +"expected to be equal to 4."
-            
-        ctx.intermediate = pad, padType
+        
+        # No need to save the variables during inference
+        if ctx.needs_input_grad[0]:
+            ctx.intermediate = pad, padType
             
         return utils.pad_transpose2D(input,pad,padType)
 
@@ -139,8 +145,10 @@ class ZeroPad2D(th.autograd.Function):
     def forward(ctx,input,pad):
         assert(input.dim() == 4), "The dimensions of the input tensor are "\
         +"expected to be equal to 4."
-            
-        ctx.intermediate = pad,
+        
+        # No need to save the variables during inference
+        if ctx.needs_input_grad[0]:
+            ctx.intermediate = pad,
             
         return utils.zeroPad2D(input,pad) 
         
@@ -161,8 +169,10 @@ class Crop2D(th.autograd.Function):
     def forward(ctx,input,crop):
         assert(input.dim() == 4), "The dimensions of the input tensor are "\
         +"expected to be equal to 4."
-            
-        ctx.intermediate = crop,
+        
+        # No need to save the variables during inference
+        if ctx.needs_input_grad[0]:
+            ctx.intermediate = crop,
             
         return utils.crop2D(input,crop) 
         
@@ -188,8 +198,10 @@ class SymmetricPad2D(th.autograd.Function):
     def forward(ctx,input,pad):
         assert(input.dim() == 4), "The dimensions of the input tensor are "\
         +"expected to be equal to 4."
-            
-        ctx.intermediate = pad,
+        
+        # No need to save the variables during inference
+        if ctx.needs_input_grad[0]:
+            ctx.intermediate = pad,
             
         return utils.symmetricPad2D(input,pad) 
         
@@ -214,8 +226,10 @@ class SymmetricPad_transpose2D(th.autograd.Function):
     @staticmethod
     def forward(ctx,input,crop):
         assert(input.dim() == 4), "The input is expected to be a 4-D tensor."
-            
-        ctx.intermediate = crop,
+        
+        # No need to save the variables during inference
+        if ctx.needs_input_grad[0]:
+            ctx.intermediate = crop,
             
         return utils.symmetricPad_transpose2D(input,crop)
 
@@ -232,6 +246,12 @@ class SymmetricPad_transpose2D(th.autograd.Function):
 class L2Prox(th.autograd.Function):
     r""" Y = L2PROX(X,Z,ALPHA,STDN) computes the proximal map layer for the 
    indicator function :
+       
+   Y = prox_IC(Z,EPSILON){X} = argmin ||Y-X||^2     
+                              ||(Y-Z)|| <= EPSILON 
+                                
+                             = argmin ||Y-X||^2 + i_C(Z,EPSILON){Y}
+                                  Y       
 
                       { 0 if ||Y-Z|| <= EPSILON
    i_C(Z,EPSILON){Y}= {
@@ -269,7 +289,7 @@ class L2Prox(th.autograd.Function):
         assert(stdn.numel() == 1 or stdn.numel() == batch), \
             "stdn must be either a tensor of size one or a tensor of size "\
             "equal to the batch number."
-        assert(all(stdn > 0)), "The noise standard deviations must be positive."
+        assert(all(stdn.view(-1) > 0)), "The noise standard deviations must be positive."
         
         stdn = stdn.view(-1,1,1,1)
         
@@ -282,7 +302,9 @@ class L2Prox(th.autograd.Function):
         diff_norm = diff.view(batch,-1).norm(p=2,dim = 1).view(batch,1,1,1)
         max_norm = diff_norm.max(epsilon)
         
-        ctx.save_for_backward(diff,diff_norm,max_norm,epsilon)
+        # No need to save the variables during inference
+        if ctx.needs_input_grad[0] or ctx.needs_input_grad[2]:
+            ctx.save_for_backward(diff,diff_norm,max_norm,epsilon)
         
         return other + diff.mul(epsilon).div(max_norm)
             
@@ -304,7 +326,7 @@ class L2Prox(th.autograd.Function):
             grad_input = grad_output.mul(epsilon.div(max_norm))
             ip = grad_input.mul(diff).view(batch,-1).sum(1).view(-1,1,1,1)
             ip = ip.mul(r)
-            grad_input -= diff.mul(ip)         
+            grad_input -= diff.mul(ip)        
                         
         return grad_input,None,grad_alpha,None
 
@@ -312,6 +334,12 @@ class SVL2Prox(th.autograd.Function):
     r""" Y = SVL2PROX(X,Z,S,ALPHA) computes the proximal map layer for the 
    indicator function that involves the covariance matrix S of spatially 
    variant noise:
+       
+   Y = prox_IC(Z,S,EPSILON){X} = argmin ||Y-X||^2     
+                                ||S(Y-Z)|| <= EPSILON 
+                                
+                               = argmin ||Y-X||^2 + i_C(Z,S,EPSILON){Y}
+                                   Y
 
                         { 0 if ||S(Y-Z)|| <= EPSILON
    i_C(Z,S,EPSILON){Y}= {
@@ -320,8 +348,8 @@ class SVL2Prox(th.autograd.Function):
    X, Z and Y are tensors of size N x C x H x W, ALPHA is a scalar tensor, 
    S is either a scalar tensor, a tensor with N elements or a tensor with
    the same dimensions as X. In any of these cases its values correspond to the
-   standard deivation of the noise. Alternatively, it can be a function that 
-   applies to X the square root of the inverse covariance matrix of the noise.
+   standard deviation of the noise for every element of the tensor using the
+   broadcasting rules.
    EPSILON = exp(ALPHA)*V, where V = sqrt(H*W*C-1).
   
    Y = Z + K* (X-Z) where K = EPSILON / max(||S(X-Z)||,EPSILON);
@@ -330,14 +358,14 @@ class SVL2Prox(th.autograd.Function):
    projected onto DLDY. DLDX has the same dimensions as X and DLDA the same 
    dimensions as ALPHA.
     
-   DLDX = K ( I - S(S(X-D)*(X-D)^T/ max(||X-D||,EPSILON)^2) * R) * DLDY
+   DLDX = K ( I - S(S(X-Z)*(X-Z)^T/ max(||S(X-Z)||,EPSILON)^2) * R) * DLDY
    
-   where R = (sgn(||X-Z||-epsilon)+1)/2
+   where R = (sgn(||S(X-Z)||-epsilon)+1)/2
 
    DLDA = B*(X-Z)^T*DLDY
 
-   where B = [ EPSILON *{ 2*max(||X-Z||,EPSILON)-
-   EPSILON*(1-sgn(||X-Z||-EPSILON)) } ] / [ 2*max(||X-Z||,EPSILON)^2 ]"""    
+   where B = [ EPSILON *{ 2*max(||S(X-Z)||,EPSILON)-
+   EPSILON*(1-sgn(||S(X-Z)||-EPSILON)) } ] / [ 2*max(||S(X-Z)||,EPSILON)^2 ]"""    
 
     @staticmethod
     def forward(ctx,input,other,alpha,stdn):
@@ -349,23 +377,27 @@ class SVL2Prox(th.autograd.Function):
         N = math.sqrt(input[0].numel()-1)
         batch = input.size(0)
         
-        assert(stdn.numel() == 1 or stdn.numel() == batch), \
+        assert(stdn.numel() == 1 or stdn.numel() == batch or stdn.size() == input.size()), \
             "stdn must be either a tensor of size one or a tensor of size "\
-            "equal to the batch number."
-        assert(all(stdn > 0)), "The noise standard deviations must be positive."
+            "equal to the batch number or a tensor of size equal to the size "\
+            "of the first input argument."
+        assert(all(stdn.view(-1) > 0)), "The noise standard deviations must be positive."
         
-        stdn = stdn.view(-1,1,1,1)
+        if stdn.size() != input.size():
+            stdn = stdn.view(-1,1,1,1)
         
         if alpha is None:
             alpha = th.Tensor([0]).type_as(stdn)
             
-        epsilon = stdn.mul(alpha.exp())*N
+        epsilon = alpha.exp().mul(N).view(1,1,1,1)
         
         diff = input.add(-other)
-        diff_norm = diff.view(batch,-1).norm(p=2,dim = 1).view(batch,1,1,1)
+        diff_norm = diff.div(stdn).view(batch,-1).norm(p=2,dim=1).view(batch,1,1,1)
         max_norm = diff_norm.max(epsilon)
         
-        ctx.save_for_backward(diff,diff_norm,max_norm,epsilon)
+        # No need to save the variables during inference
+        if ctx.needs_input_grad[0] or ctx.needs_input_grad[2]:
+            ctx.save_for_backward(diff,diff_norm,max_norm,epsilon,stdn)
         
         return other + diff.mul(epsilon).div(max_norm)
             
@@ -373,7 +405,7 @@ class SVL2Prox(th.autograd.Function):
     def backward(ctx,grad_output):
         grad_input = grad_alpha = None
         
-        diff,diff_norm,max_norm,epsilon = ctx.saved_variables
+        diff,diff_norm,max_norm,epsilon,stdn = ctx.saved_variables
         batch = grad_output.size(0)
 
         if ctx.needs_input_grad[2]:
@@ -387,7 +419,7 @@ class SVL2Prox(th.autograd.Function):
             grad_input = grad_output.mul(epsilon.div(max_norm))
             ip = grad_input.mul(diff).view(batch,-1).sum(1).view(-1,1,1,1)
             ip = ip.mul(r)
-            grad_input -= diff.mul(ip)         
+            grad_input -= diff.mul(ip).div(stdn.pow(2))         
                         
         return grad_input,None,grad_alpha,None
 
@@ -395,6 +427,12 @@ class SVL2Prox(th.autograd.Function):
 class L2Proj(th.autograd.Function):
     r""" Y = L2PROJ(X,STDN,ALPHA) computes the projection layer for the 
    indicator function :
+
+   Y = proj(EPSILON){X} = argmin ||Y-X||^2     
+                           ||Y|| <= EPSILON 
+                                
+                          = argmin ||Y-X||^2 + i_C(EPSILON){Y}
+                              Y       
 
                       { 0 if ||Y|| <= EPSILON
    i_C(EPSILON){Y}=   {
@@ -431,17 +469,21 @@ class L2Proj(th.autograd.Function):
         assert(stdn.numel() == 1 or stdn.numel() == batch), \
             "stdn must be either a tensor of size one or a tensor of size "\
             "equal to the batch number."
-        assert(all(stdn > 0)), "The noise standard deviations must be positive."
+        assert(all(stdn.view(-1) > 0)), "The noise standard deviations must be positive."
+        
+        stdn = stdn.view(-1,1,1,1)
         
         if alpha is None:
             alpha = th.Tensor([0]).type_as(stdn)
         
-        epsilon = stdn.mul(alpha.exp().mul(N)).view(-1,1,1,1)
+        epsilon = stdn.mul(alpha.exp())*N
         
-        input_norm = input.contiguous().view(batch,-1).norm(p=2,dim = 1).view(batch,1,1,1)
+        input_norm = input.view(batch,-1).norm(p=2,dim=1).view(batch,1,1,1)
         max_norm = input_norm.max(epsilon)
         
-        ctx.save_for_backward(input,input_norm,max_norm,epsilon)
+        # No need to save the variables during inference
+        if ctx.needs_input_grad[0] or ctx.needs_input_grad[1]:
+            ctx.save_for_backward(input,input_norm,max_norm,epsilon)
         
         return input.mul(epsilon).div(max_norm)
     
@@ -466,7 +508,98 @@ class L2Proj(th.autograd.Function):
             grad_input -= input.mul(ip)         
                         
         return grad_input,grad_alpha,None
+
+
+class SVL2Proj(th.autograd.Function):
+    r""" Y = SVL2PROJ(X,S,ALPHA) computes the L2 projection that involves the 
+    covariance matrix S of spatially variant noise:
+       
+   Y = proj(S,EPSILON){X} = argmin ||Y-X||^2     
+                             ||S(Y)|| <= EPSILON 
+                                
+                          = argmin ||Y-X||^2 + i_C(S,EPSILON){Y}
+                              Y
+
+                        { 0 if ||S(Y)|| <= EPSILON
+   i_C(Z,S,EPSILON){Y}= {
+                        { +inf if ||S(Y)|| > EPSILON
+
+   X and Y are tensors of size N x C x H x W, ALPHA is a scalar tensor, 
+   S is either a scalar tensor, a tensor with N elements or a tensor with
+   the same dimensions as X. In any of these cases its values correspond to the
+   standard deviation of the noise for every element of the tensor using the
+   broadcasting rules.
+   EPSILON = exp(ALPHA)*V, where V = sqrt(H*W*C-1).
+  
+   Y = K*X where K = EPSILON / max(||S(X)||,EPSILON);
+
+   DLDX, DLDA = SVL2PROJ.backward(DLDY) computes the derivatives of the block 
+   projected onto DLDY. DLDX has the same dimensions as X and DLDA the same 
+   dimensions as ALPHA.
     
+   DLDX = K ( I - S(S(X)*(X)^T/ max(||S(X)||,EPSILON)^2) * R) * DLDY
+   
+   where R = (sgn(||S(X)||-epsilon)+1)/2
+
+   DLDA = B*(X)^T*DLDY
+
+   where B = [ EPSILON *{ 2*max(||S(X)||,EPSILON)-
+   EPSILON*(1-sgn(||S(X)||-EPSILON)) } ] / [ 2*max(||S(X)||,EPSILON)^2 ]"""    
+
+    @staticmethod
+    def forward(ctx,input,alpha,stdn):
+        assert(input.dim() == 4),"Input is expected to be a 4-D tensor."
+        assert(alpha is None or alpha.numel() == 1), "alpha needs to be "\
+        "either None or a tensor of size 1."
+                
+        N = math.sqrt(input[0].numel()-1)
+        batch = input.size(0)
+        
+        assert(stdn.numel() == 1 or stdn.numel() == batch or stdn.size() == input.size()), \
+            "stdn must be either a tensor of size one or a tensor of size "\
+            "equal to the batch number or a tensor of size equal to the size "\
+            "of the first input argument."
+        assert(all(stdn.view(-1) > 0)), "The noise standard deviations must be positive."
+        
+        if stdn.size() != input.size():
+            stdn = stdn.view(-1,1,1,1)
+        
+        if alpha is None:
+            alpha = th.Tensor([0]).type_as(stdn)
+            
+        epsilon = alpha.exp().mul(N).view(1,1,1,1)
+        
+        input_norm = input.div(stdn).view(batch,-1).norm(p=2,dim=1).view(batch,1,1,1)
+        max_norm = input_norm.max(epsilon)
+        
+        # No need to save the variables during inference
+        if ctx.needs_input_grad[0] or ctx.needs_input_grad[1]:
+            ctx.save_for_backward(input,input_norm,max_norm,epsilon,stdn)
+        
+        return input.mul(epsilon).div(max_norm)
+            
+    @staticmethod
+    def backward(ctx,grad_output):
+        grad_input = grad_alpha = None
+        
+        input,input_norm,max_norm,epsilon,stdn = ctx.saved_variables
+        batch = grad_output.size(0)
+
+        if ctx.needs_input_grad[1]:
+            k = epsilon.div(max_norm)
+            k[k >= 1] = 0
+            grad_alpha = grad_output.mul(input).mul(k).sum()
+            
+        if ctx.needs_input_grad[0]:
+            r = (utils.signum(input_norm-epsilon)+1)/2
+            r = r.div(max_norm.pow(2))
+            grad_input = grad_output.mul(epsilon.div(max_norm))
+            ip = grad_input.mul(input).view(batch,-1).sum(1).view(-1,1,1,1)
+            ip = ip.mul(r)
+            grad_input -= input.mul(ip).div(stdn.pow(2))         
+                        
+        return grad_input,grad_alpha,None
+
 class imLoss(th.autograd.Function) :
     r"""  Y = IMLOSS(X, Xgt) computes the loss incurred by the estimated
     images X given the ground-truth images Xgt.
