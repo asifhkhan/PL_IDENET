@@ -252,13 +252,19 @@ class BSDS68(data.Dataset):
         if tall:
             for i in imList:
                 tmp = Img.imread(os.path.join(dbPath,i)).astype(dtype)
-                tmp.shape += (1,)
+                if color:
+                    tmp.shape += (1,)
+                else:
+                    tmp.shape += (1,1)
                 if tmp.shape[0] > tmp.shape[1]:
                     img = np.concatenate((img,tmp),axis=3) if img.size else tmp
         else:
             for i in imList:
                 tmp = Img.imread(os.path.join(dbPath,i)).astype(dtype)
-                tmp.shape += (1,)
+                if color:
+                    tmp.shape += (1,)
+                else:
+                    tmp.shape += (1,1)
                 if tmp.shape[0] <= tmp.shape[1]:
                     img = np.concatenate((img,tmp),axis=3) if img.size else tmp
                     
