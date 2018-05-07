@@ -11,14 +11,15 @@ import os
 import numpy as np
 import torch.utils.data as data
 from pydl.utils import gen_imdb_BSDS500_fromList
+from matplotlib import image as Img
 
 class BSDS(data.Dataset):
     
     def __init__(self,stdn,random_seed=20180102,filepath='',train=True,\
                  color=False,shape=(180,180),im2Tensor = True):
         
-        assert(isinstance(stdn,(float,tuple))),"stdn is expected to be either "\
-        +"a float or a tuple"
+        assert(isinstance(stdn,(float,int,tuple))),"stdn is expected to be either "\
+        +"a float or an int or a tuple"
                 
         if isinstance(stdn,float):
             stdn = (stdn,)
@@ -112,10 +113,10 @@ class BSDS_v2(data.Dataset):
     def __init__(self,stdn,random_seed=20180102,filepath='',train=True,\
                  color=False,shape=(180,180),im2Tensor = True):
         
-        assert(isinstance(stdn,(float,tuple))),"stdn is expected to be either "\
-        +"a float or a tuple"
+        assert(isinstance(stdn,(float,int,tuple))),"stdn is expected to be either "\
+        +"a float or an int or a tuple"
                 
-        if isinstance(stdn,float):
+        if isinstance(stdn,(int,float)):
             stdn = (stdn,)
         if isinstance(stdn,tuple):
             stdn = tuple(float(i) for i in stdn)
@@ -210,3 +211,92 @@ class BSDS_v2(data.Dataset):
         
         return ndata
 
+class BSDS68(data.Dataset):
+    
+    def __init__(self,stdn,random_seed=20180102,tall=True,color=False,\
+                 im2Tensor=True,dtype='f', filename=\
+                 "../../datasets/BSDS500/BSDS_validation_list.txt"):
+        
+        assert(isinstance(stdn,(float,int,tuple))),"stdn is expected to be either "\
+        +"a float or an int or a tuple"
+                
+        if isinstance(stdn,(float,int)):
+            stdn = (stdn,)
+        if isinstance(stdn,tuple):
+            stdn = tuple(float(i) for i in stdn)
+        
+        self.stdn = np.asarray(stdn) 
+        self.tall = tall
+        self.rng = np.random.RandomState(random_seed)
+        
+        if im2Tensor:
+            fshape = (3,2,0,1)
+        else:
+            fshape = (3,0,1,2)
+               
+        currentPath = os.path.dirname(os.path.realpath(__file__))
+        filename = os.path.join(currentPath,filename)
+        dbPath = os.path.dirname(filename)
+        
+        with open(filename) as f:
+            imList = f.readlines()
+            imList = [f.strip() for f in imList]
+
+        if color:
+            dbPath = os.path.join(dbPath,'color')
+        else:
+            dbPath = os.path.join(dbPath,'gray')
+        
+        
+        img = np.ndarray(0)
+        if tall:
+            for i in imList:
+                tmp = Img.imread(os.path.join(dbPath,i)).astype(dtype)
+                tmp.shape += (1,)
+                if tmp.shape[0] > tmp.shape[1]:
+                    img = np.concatenate((img,tmp),axis=3) if img.size else tmp
+        else:
+            for i in imList:
+                tmp = Img.imread(os.path.join(dbPath,i)).astype(dtype)
+                tmp.shape += (1,)
+                if tmp.shape[0] <= tmp.shape[1]:
+                    img = np.concatenate((img,tmp),axis=3) if img.size else tmp
+                    
+        
+        self.img_gt = img.transpose(fshape)
+        self.img_noisy = self.generate_NoisyData()
+        
+    def __getitem__(self, index):
+        """
+        Args:
+            index (int): Index
+
+        Returns:
+            tuple: (img, target, noise_std).
+        """
+        
+        img, target, noise_std = self.img_noisy[index],\
+                                 self.img_gt[index%len(self.img_gt)],\
+                                 self.stdn.astype(self.img_gt.dtype)[index//len(self.img_gt)]
+        
+        return img,target,noise_std
+    
+    def __len__(self):
+        
+        return len(self.img_noisy)
+    
+    def generate_NoisyData(self):
+        r"""Create noisy observations using the ground-truth data."""
+            
+        shape = self.img_gt.shape
+        dtype = self.img_gt.dtype
+                        
+        ndata_shape = (shape[0]*len(self.stdn),)+shape[1:]
+        ndata = np.empty(ndata_shape,dtype=dtype)
+        
+        for i in range(len(self.stdn)):
+            noise = self.stdn[i]*self.rng.randn(*shape)
+            noise = noise.astype(dtype)
+            ndata[shape[0]*i:shape[0]*(i+1),...] = self.img_gt+noise
+        
+        return ndata

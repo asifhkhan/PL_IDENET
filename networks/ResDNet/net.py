@@ -293,3 +293,37 @@ def loadModel(filePath,location = 'cpu'):
     model.load_state_dict(state['model_state_dict'])
 
     return model
+
+
+def ResDNet_denoise(y,stdn):
+    import os.path
+       
+    assert(isinstance(stdn,(float,int)) or \
+           (th.is_tensor(stdn) and stdn.numel()==y.size(0))),\
+           "The second argument must be a tensor or an int or a float."
+    
+    if not th.is_tensor(stdn):
+        stdn = th.Tensor([stdn]).type_as(y)
+    
+    while y.dim() < 4:
+        y = y.unsqueeze(0)
+    
+    currentPath = os.path.dirname(os.path.realpath(__file__))
+    mpath = os.path.join(currentPath,'models','ResDNet_')
+    
+    batch,channels,H,W = y.shape
+    
+    if channels == 1:
+        mpath += "GD5F64.md"
+    elif channels == 3:
+        mpath += "CD5F64.md"        
+    else: 
+        raise ValueError("Input tensor must have either one or three channels.")
+    
+    model = loadModel(mpath)
+    if y.is_cuda:
+        model = model.cuda()
+    
+    with th.no_grad(): out = model(y,stdn)
+    
+    return out       

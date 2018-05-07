@@ -88,3 +88,43 @@ def loadModel(filePath,location = 'cpu'):
     model.load_state_dict(state['model_state_dict'])
 
     return model
+
+def UDNet_denoise(y,stdn):
+    import os.path
+    
+    assert(isinstance(stdn,(float,int))),"The second argument must be an int or"\
+    + " a float."
+    
+    stdn = th.Tensor([stdn]).type_as(y)
+    
+    while y.dim() < 4:
+        y = y.unsqueeze(0)
+    
+    currentPath = os.path.dirname(os.path.realpath(__file__))
+    mpath = os.path.join(currentPath,'models','UDNet_')
+    
+    batch,channels,H,W = y.shape
+    
+    if channels == 1:
+        if stdn < 30:
+            mpath += "LGJS5.md"
+        else:
+            mpath += "HGJS5.md"
+    elif channels == 3:
+        if stdn < 30:
+            mpath += "LCJS5.md"
+        else:
+            mpath += "HCJS5.md"
+    else: 
+        raise ValueError("Input tensor must have either one or three channels.")
+    
+    model = loadModel(mpath)
+    if y.is_cuda:
+        model = model.cuda()
+    
+    with th.no_grad(): out = model(y,stdn)
+    
+    return out       
+        
+    
+    

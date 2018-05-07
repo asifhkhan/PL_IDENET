@@ -465,7 +465,7 @@ class L2Proj(th.autograd.Function):
                 
         N = math.sqrt(input[0].numel()-1)
         batch = input.size(0)
-        
+               
         assert(stdn.numel() == 1 or stdn.numel() == batch), \
             "stdn must be either a tensor of size one or a tensor of size "\
             "equal to the batch number."
@@ -478,7 +478,7 @@ class L2Proj(th.autograd.Function):
         
         epsilon = stdn.mul(alpha.exp())*N
         
-        input_norm = input.view(batch,-1).norm(p=2,dim=1).view(batch,1,1,1)
+        input_norm = input.contiguous().view(batch,-1).norm(p=2,dim=1).view(batch,1,1,1)
         max_norm = input_norm.max(epsilon)
         
         # No need to save the variables during inference

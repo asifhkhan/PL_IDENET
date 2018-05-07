@@ -1045,6 +1045,39 @@ def getPadSize(shape,patchSize,stride):
     
     return tuple(int(i) for i in padSizeTB) + tuple(int(i) for i in padSizeLR)
 
+def im2col(input,block_size,stride=1,pad=0,dilation=1):
+    r""" im2col extracts all the valid patches from the input which is a 2D, 3D 
+    or 4D tensor of size [B] x [C] x H x W. The extracted patches are of size 
+    patchSize and they are extracted with an overlap equal to stride. The 
+    output is of size B x C*P x BS where P is the total number of elements
+    in the patch, while BS is the total number of extracted patches.
+    """    
+    while input.dim() < 4:
+        input = input.unsqueeze(0)
+        
+    #Im2Col(input, kernel_size, dilation, padding, stride)
+    block_size = formatInput2Tuple(block_size,int,2)
+    dilation = formatInput2Tuple(dilation,int,2)
+    pad = formatInput2Tuple(pad,int,2)
+    stride = formatInput2Tuple(stride,int,2)
+    
+    return th.nn.functional.Im2Col.apply(input,block_size,dilation,pad,stride)
+
+def col2im(input,output_size,block_size,stride=1,pad=0,dilation=1):
+    r""" col2im is the transpose operation of im2col.
+    
+    output_size : is the size of the original tensor from which the patches 
+    where extracted.
+    """    
+    #Col2Im(input, output_size, kernel_size, dilation, padding, stride)
+    assert(input.dim()==3),"The first input argument must be a 3D tensor."
+    output_size = formatInput2Tuple(output_size,int,2)
+    block_size = formatInput2Tuple(block_size,int,2)
+    dilation = formatInput2Tuple(dilation,int,2)
+    pad = formatInput2Tuple(pad,int,2)
+    stride = formatInput2Tuple(stride,int,2)    
+    
+    return th.nn.functional.Col2Im.apply(input,output_size,block_size,dilation,pad,stride)
 
 def im2patch(input,patchSize,stride=1) :
     r""" im2patch extracts all the valid patches from the input which is a 3D 
@@ -1477,6 +1510,9 @@ def wmad_estimator(x,wname='db7',mode='symmetric',multichannel=False):
     is set to True) with the respective estimated standard deviations."""
     from pywt import dwtn
     
+    assert(isinstance(x,np.ndarray) or th.is_tensor(x)),"The first input "\
+    +"argument must be either a ndarray or a tensor."
+    
     assert(isinstance(wname,str)),"The second input argument must be a string "\
     +"indicating the wavelet basis to be used for the decomposition."
 
@@ -1508,21 +1544,64 @@ def wmad_estimator(x,wname='db7',mode='symmetric',multichannel=False):
         sigma = th.from_numpy(sigma).cuda() if cuda else th.from_numpy(sigma)
     
     return sigma 
+
+
+def block_wmad_estimator(x,wname='db7',blckSize=(8,8),blckStride=(4,4),\
+                         mode='symmetric',multichannel=False,upsample = False,\
+                         upsample_mode = 'bilinear'):
+    r"""Accepts a torch tensor and provides an estimate of the standard deviation 
+    of the noise degrading blocks of the input. The overlap of the extracted 
+    blocks is defined through blckStride. The function can be applied on a
+    a batch of multichannel images. The tensor's dimensions are B x C x H x W, 
+    where H, W are the spatial dimensions, C the image channels and B is the 
+    number of images. It returns a torch tensor of size B x C x PH x PW 
+    with the respective estimated standard deviations for all blocks P = PH x PW."""
     
-#if __name__=="__main__":
-#    
-#    x = th.randn(10,7,120,240).double();
-#    pad = tuple(np.random.randint(0,60,(4)))
-#    
-#    print(pad)
-#    
-#    xp = symmetricPad2D(x,pad)
-#    z = th.randn(xp.size()).double()
-#    zp = symmetricPad_transpose2D(z,pad)
-#    
-#    ip1 = xp.contiguous().view(-1).dot(z.contiguous().view(-1))
-#    ip2= x.contiguous().view(-1).dot(zp.contiguous().view(-1))
-#    
-#    print(ip1,ip2)
-#    print(ip1-ip2)
+    assert(th.is_tensor(x) and x.dim()==4),"The first input argument must be "\
+    +"a 4D tensor."
     
+    assert(isinstance(wname,str)),"The second input argument must be a string "\
+    +"indicating the wavelet basis to be used for the decomposition."
+
+    patchDims = np.floor((np.asarray(x.shape[2:])-np.asarray(blckSize))/\
+                         np.asarray(blckStride)+1)
+    patchDims = patchDims.astype(np.int64)
+
+    from pywt import Wavelet
+    # Retrieve the high-pass decomposition filter for the wavelet transform
+    dec_hi = np.asarray(Wavelet(wname).filter_bank[1])
+    
+    kernel = th.from_numpy(dec_hi).type_as(x)
+    while kernel.dim() < 4:
+        kernel.unsqueeze_(0)
+    
+    kernel = reverse(kernel,dim=3)
+    
+    batch,channels,H,W = x.shape
+    
+    P = im2col(x,blckSize,blckStride).permute(2,0,1)
+    numPatches = P.size(0)
+    
+    assert(numPatches == patchDims[0]*patchDims[1]),"Something wrong happened."
+    
+    P = P.contiguous().view(numPatches*batch*channels,1,blckSize[0],blckSize[1])
+    
+    padding = getPad2RetainShape((kernel.shape[-1],)*2,dilation = 1)
+    
+    P = pad2D(P,padding,mode)
+    stdn_est = th.conv2d(P,kernel,stride=(1,2))
+    kernel = kernel.squeeze(0).unsqueeze(3)
+    stdn_est = th.conv2d(stdn_est,kernel,stride=(2,1))
+    
+    stdn_est = stdn_est.view(numPatches,batch,channels,-1).abs().div(.6745).median(dim=3)[0]
+    
+    if not multichannel:
+        stdn_est = stdn_est.mean(dim=2,keepdim=True)
+        stdn_est = stdn_est.expand(-1,-1,channels)
+    
+    stdn_est = stdn_est.permute(1,2,0).view(batch,channels,patchDims[0],patchDims[1]) 
+    
+    if upsample:
+        return th.nn.functional.upsample(stdn_est,x.shape[2:],mode=upsample_mode)
+    else:
+        return stdn_est
