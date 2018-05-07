@@ -8,11 +8,11 @@ Created on Sat Mar 31 09:45:54 2018
 """
 import torch as th
 from torch import nn
-from ...nnLayers import modules
-from ...nnLayers import init
-from ...nnLayers.cascades import nconv2D, nconv_transpose2D
-from ...nnLayers.functional.functional import L2Proj
-from ...utils import formatInput2Tuple, getPad2RetainShape
+from pydl.nnLayers import modules
+from pydl.nnLayers import init
+from pydl.nnLayers.cascades import nconv2D, nconv_transpose2D
+from pydl.nnLayers.functional.functional import L2Proj
+from pydl.utils import formatInput2Tuple, getPad2RetainShape
 
 class ResDNet(nn.Module):
     

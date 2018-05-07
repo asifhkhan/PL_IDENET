@@ -8,8 +8,8 @@ Created on Sat Mar 31 09:45:54 2018
 """
 import torch as th
 from torch import nn
-from ...nnLayers import modules
-from ...nnLayers import init
+from pydl.nnLayers import modules
+from pydl.nnLayers import init
 
 class UDNet(nn.Module):
     
