@@ -76,7 +76,7 @@ for stdn in opt.stdn:
             target = target.cuda()
             sigma = sigma.cuda()
     
-        out = UDNet_denoise(input,sigma)
+        out = UDNet_denoise(input,sigma[0].item())
         ptable_tall[start:end:1,0]= psnr(input,target)
         ptable_tall[start:end:1,1]= psnr(out,target)
         del out,input,target,sigma
@@ -91,7 +91,7 @@ for stdn in opt.stdn:
             target = target.cuda()
             sigma = sigma.cuda()
     
-        out = UDNet_denoise(input,sigma)
+        out = UDNet_denoise(input,sigma[0].item())
         ptable_wide[start:end:1,0]= psnr(input,target)
         ptable_wide[start:end:1,1]= psnr(out,target)
         del out,input,target,sigma
