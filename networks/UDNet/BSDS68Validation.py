@@ -115,3 +115,8 @@ currentPath = os.path.dirname(os.path.realpath(__file__))
 dirPath = os.path.join(currentPath,'Results')
 os.makedirs(dirPath,exist_ok = True)
 th.save(results,os.path.join(dirPath,cstr))
+
+
+#results = th.load('pydl/networks/UDNet/Results/color_BSDS68.pth',map_location=lambda storage,loc:storage)
+#for std in tuple(results.keys()) :
+#    print("==> std: {:>5} ::noisy psnr: {:> 2.2f} -- denoised psnr: {:> 2.2f}".format(std,results[std]['noisy'].mean(),results[std]['denoised'].mean()))
