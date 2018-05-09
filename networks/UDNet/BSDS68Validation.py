@@ -106,7 +106,10 @@ for stdn in opt.stdn:
     del ptable
 
 cstr = "color_BSDS68_std:" if opt.color else "gray_BSDS68_std:"
-cstr += str(opt.stdn) + ".pth"
+cstr += str(opt.stdn) 
+
+if opt.matlab_model : cstr += "_matlab"
+cstr += ".pth"
 
 currentPath = os.path.dirname(os.path.realpath(__file__))
 dirPath = os.path.join(currentPath,'Results')
