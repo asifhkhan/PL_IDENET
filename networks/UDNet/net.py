@@ -97,15 +97,19 @@ def loadModelfromMatlab(filepath,loadParams=False):
     
     from collections import OrderedDict
     from argparse import Namespace
+    import numpy as np
     
     f = loadmat(filepath)
     d = f['net']['layers']
     step = f['net']['meta']['netParams']['step']
+    wshape = np.asarray(d[0]['weights'][0]).shape
+    input_channels = 1 if len(wshape) == 3 else wshape[-2]
+    
     del f
     
-    opt = Namespace(kernel_size = (len(d[0]['weights'][0]),len(d[0]['weights'][0][0])),\
-                    input_channels = len(d[0]['weights'][0][0][0]),\
-                    output_features = len(d[0]['weights'][0][0][0][0]),\
+    opt = Namespace(kernel_size = wshape[0:2],\
+                    input_channels = input_channels,\
+                    output_features = wshape[-1],\
                     rbf_mixtures = len(d[0]['rbf_means']),\
                     rbf_precision = d[0]['rbf_precision'],\
                     stages = len(d)-1,\
@@ -142,14 +146,27 @@ def loadModelfromMatlab(filepath,loadParams=False):
     
     
     for i in range(opt.stages):
-        state_dict['resRBF.'+str(i)+'.conv_weights'] = th.Tensor(d[i]['weights'][0]).permute(3,2,0,1)
+        if input_channels == 1:
+            state_dict['resRBF.'+str(i)+'.conv_weights'] = \
+                th.Tensor(d[i]['weights'][0]).permute(2,0,1).unsqueeze(1)
+        else:
+            state_dict['resRBF.'+str(i)+'.conv_weights'] = \
+                th.Tensor(d[i]['weights'][0]).permute(3,2,0,1)                
         if not opt.convWeightSharing:
-            state_dict['resRBF.'+str(i)+'.convt_weights'] = th.Tensor(d[i]['weights'][1]).permute(3,2,0,1)
-        state_dict['resRBF.'+str(i)+'.scale_f'] = th.Tensor(d[i]['weights'][2]).squeeze().log()
+            if input_channels == 1:
+                state_dict['resRBF.'+str(i)+'.convt_weights'] = \
+                    th.Tensor(d[i]['weights'][1]).permute(2,0,1).unsqueeze(1)
+            else:
+                state_dict['resRBF.'+str(i)+'.convt_weights'] = \
+                    th.Tensor(d[i]['weights'][1]).permute(3,2,0,1)        
+        
+        state_dict['resRBF.'+str(i)+'.scale_f'] = th.Tensor(d[i]['weights'][2]).log()
         if opt.scale_t:
-            state_dict['resRBF.'+str(i)+'.scale_t'] = th.Tensor(d[i]['weights'][3]).squeeze().log()
+            state_dict['resRBF.'+str(i)+'.scale_t'] = th.Tensor(d[i]['weights'][3]).log()
+        
         if opt.alpha:
             state_dict['resRBF.'+str(i)+'.alpha_prox'] = th.Tensor((d[i]['weights'][5],))
+        
         state_dict['resRBF.'+str(i)+'.rbf_weights'] = th.Tensor(d[i]['weights'][4]) 
     
     model.load_state_dict(state_dict)
