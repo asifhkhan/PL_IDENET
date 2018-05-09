@@ -10,6 +10,7 @@ import torch as th
 from torch import nn
 from pydl.nnLayers import modules
 from pydl.nnLayers import init
+from pydl.utils import loadmat
 
 class UDNet(nn.Module):
     
@@ -89,13 +90,88 @@ def loadModel(filePath,location = 'cpu'):
 
     return model
 
-def UDNet_denoise(y,stdn):
+def loadModelfromMatlab(filepath,loadParams=False):
+    """Creates a pytorch UDNet model from a matlab UDNet model. If loadParams
+    is True the model and the parameters to initialize the model are returned.
+    Otherwise only the model is returned."""
+    
+    from collections import OrderedDict
+    from argparse import Namespace
+    
+    f = loadmat(filepath)
+    d = f['net']['layers']
+    step = f['net']['meta']['netParams']['step']
+    del f
+    
+    opt = Namespace(kernel_size = (len(d[0]['weights'][0]),len(d[0]['weights'][0][0])),\
+                    input_channels = len(d[0]['weights'][0][0][0]),\
+                    output_features = len(d[0]['weights'][0][0][0][0]),\
+                    rbf_mixtures = len(d[0]['rbf_means']),\
+                    rbf_precision = d[0]['rbf_precision'],\
+                    stages = len(d)-1,\
+                    pad = tuple(d[0]['padSize']),\
+                    padType = d[0]['padType'],\
+                    convWeightSharing = not bool(d[0]['learningRate'][1]),\
+                    scale_f = bool(d[0]['learningRate'][2]),\
+                    scale_t = bool(d[0]['learningRate'][3]),\
+                    normalizedWeights = bool(d[0]['weightNormalization']),\
+                    zeroMeanWeights = bool(d[0]['zeroMeanFilters']),\
+                    rbf_start = float(d[0]['rbf_means'][0]),\
+                    rbf_end = float(d[0]['rbf_means'][-1]),\
+                    data_min = d[0]['lb'],\
+                    data_max = d[0]['ub'],\
+                    data_step = step,\
+                    alpha = bool(d[0]['learningRate'][5]),\
+                    clb = d[-1]['lb'],\
+                    cub = d[-1]['ub'])
+    
+    
+    params = OrderedDict(kernel_size=opt.kernel_size,input_channels=opt.input_channels,\
+         output_features=opt.output_features,rbf_mixtures=opt.rbf_mixtures,\
+         rbf_precision=opt.rbf_precision,stages=opt.stages,pad=opt.pad,\
+         padType=opt.padType,convWeightSharing=opt.convWeightSharing,\
+         scale_f=opt.scale_f,scale_t=opt.scale_t,normalizedWeights=\
+         opt.normalizedWeights,zeroMeanWeights=opt.zeroMeanWeights,rbf_start=\
+         opt.rbf_start,rbf_end=opt.rbf_end,data_min=opt.data_min,data_max=\
+         opt.data_max,data_step=opt.data_step,alpha=opt.alpha,clb=opt.clb,\
+         cub=opt.cub)
+    
+    # Create a pytorch model with the same parameters as the matlab model
+    model = UDNet(*params.values())
+    state_dict = model.state_dict()
+    
+    
+    for i in range(opt.stages):
+        state_dict['resRBF.'+str(i)+'.conv_weights'] = th.Tensor(d[i]['weights'][0]).permute(3,2,0,1)
+        if not opt.convWeightSharing:
+            state_dict['resRBF.'+str(i)+'.convt_weights'] = th.Tensor(d[i]['weights'][1]).permute(3,2,0,1)
+        state_dict['resRBF.'+str(i)+'.scale_f'] = th.Tensor(d[i]['weights'][2]).squeeze().log()
+        if opt.scale_t:
+            state_dict['resRBF.'+str(i)+'.scale_t'] = th.Tensor(d[i]['weights'][3]).squeeze().log()
+        if opt.alpha:
+            state_dict['resRBF.'+str(i)+'.alpha_prox'] = th.Tensor((d[i]['weights'][5],))
+        state_dict['resRBF.'+str(i)+'.rbf_weights'] = th.Tensor(d[i]['weights'][4]) 
+    
+    model.load_state_dict(state_dict)
+    
+    if loadParams:
+        return model, params 
+    else: 
+        return model
+
+
+def UDNet_denoise(y,stdn,matlab_model = False):
+    r"""If matlab_model is set to True then the model trained on MatConvnet
+    is loaded instead of the one trained on pytorch. By default the pytorch 
+    trained model is used."""
     import os.path
     
     assert(isinstance(stdn,(float,int))),"The second argument must be an int or"\
     + " a float."
     
     stdn = th.Tensor([stdn]).type_as(y)
+    
+    ext = ".mat" if matlab_model else ".md"
     
     while y.dim() < 4:
         y = y.unsqueeze(0)
@@ -107,24 +183,23 @@ def UDNet_denoise(y,stdn):
     
     if channels == 1:
         if stdn < 30:
-            mpath += "LGJS5.md"
+            mpath += "LGJS5"
         else:
-            mpath += "HGJS5.md"
+            mpath += "HGJS5"
     elif channels == 3:
         if stdn < 30:
-            mpath += "LCJS5.md"
+            mpath += "LCJS5"
         else:
-            mpath += "HCJS5.md"
+            mpath += "HCJS5"
     else: 
         raise ValueError("Input tensor must have either one or three channels.")
     
-    model = loadModel(mpath)
+    mpath += ext
+    model = loadModelfromMatlab(mpath) if matlab_model else loadModel(mpath)
     if y.is_cuda:
         model = model.cuda()
     
     with th.no_grad(): out = model(y,stdn)
     
     return out       
-        
-    
     

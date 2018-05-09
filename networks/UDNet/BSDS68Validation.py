@@ -30,12 +30,13 @@ tupleOfFloats = lambda s: tupleOfData(s,float)
 
 parser = argparse.ArgumentParser(description='Validation of ResDNet in BSDS68')
 parser.add_argument('--stdn', type = tupleOfFloats, default='(5,10,15,20,25,30,35,40,45,50,55)', help=" Number of noise levels (standard deviation) for which the network will be validated.")
-parser.add_argument('--color', action='store_true', help="Type of images used to validate the network.")
+parser.add_argument('--color', action = 'store_true', help="Type of images used to validate the network.")
 parser.add_argument('--seed', type = int, default = 20151909, help='random seed to use for generating the noisy images.')
 parser.add_argument('--batchSize', type = int, default = 64, help='validation batch size.')
 parser.add_argument('--threads', type = int, default = 4, help='number of threads for data loader to use.')
-parser.add_argument('--cuda', action='store_true', help='use cuda?')
+parser.add_argument('--cuda', action = 'store_true', help='use cuda?')
 parser.add_argument('--gpu_device', type = int, default = 0, help='which gpu to use?')
+parser.add_argument('--matlab_model', action = 'store_true', help='use the matlab trained models?')
 
 opt = parser.parse_args()
 
@@ -76,7 +77,7 @@ for stdn in opt.stdn:
             target = target.cuda()
             sigma = sigma.cuda()
     
-        out = UDNet_denoise(input,sigma[0].item())
+        out = UDNet_denoise(input,sigma[0].item(),opt.matlab_model)
         ptable_tall[start:end:1,0]= psnr(input,target)
         ptable_tall[start:end:1,1]= psnr(out,target)
         del out,input,target,sigma
@@ -91,7 +92,7 @@ for stdn in opt.stdn:
             target = target.cuda()
             sigma = sigma.cuda()
     
-        out = UDNet_denoise(input,sigma[0].item())
+        out = UDNet_denoise(input,sigma[0].item(),opt.matlab_model)
         ptable_wide[start:end:1,0]= psnr(input,target)
         ptable_wide[start:end:1,1]= psnr(out,target)
         del out,input,target,sigma
