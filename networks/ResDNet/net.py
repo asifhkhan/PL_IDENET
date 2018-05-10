@@ -267,16 +267,20 @@ class ResDNet_old(nn.Module):
             + ', convWeightSharing = ' + str(self.convWeightSharing)\
             + ', shortcut = ' + str(self.shortcut) + ')' 
 
-def loadModel(filePath,location = 'cpu'):
+
+def loadModel(filePath,location='cpu',gpu_device=0):
     """Loads a trained model.
     
     filePath : the path of the file containing the parameters and the architecture
                of the model.
     location : Where to load the model. (Default: cpu)
     """
-    # We assume that the parameters of the model are saved in GPU format.
     if location == 'gpu' and th.cuda.is_available():
-        state = th.load(filePath)
+        if gpu_device != th.cuda.current_device()\
+            and not (gpu_device >= 0 and gpu_device < th.cuda.device_count()):
+                gpu_device = th.cuda.current_device()
+                
+        state = th.load(filePath,map_location=lambda storage,loc:storage.cuda(gpu_device))
     elif location == 'cpu':
         state =  th.load(filePath,map_location=lambda storage,loc:storage)
     else:
@@ -293,7 +297,6 @@ def loadModel(filePath,location = 'cpu'):
     model.load_state_dict(state['model_state_dict'])
 
     return model
-
 
 def ResDNet_denoise(y,stdn):
     import os.path

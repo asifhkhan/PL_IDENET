@@ -242,7 +242,7 @@ for stage in range(opt.stages):
             print('===> No saved model to resume from.\n')
         else:
             if opt.cuda:
-                state = th.load(loadPath)
+                state = th.load(loadPath,map_location=lambda storage,loc:storage.cuda(opt.gpu_device))
             else:
                 state = th.load(loadPath,map_location=lambda storage,loc:storage)
     

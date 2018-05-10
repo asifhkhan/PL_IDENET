@@ -63,16 +63,19 @@ class UDNet(nn.Module):
         return self.__class__.__name__ + '(' \
             + 'stages = ' + str(self.stages) + ')'    
 
-def loadModel(filePath,location = 'cpu'):
+def loadModel(filePath,location='cpu',gpu_device=0):
     """Loads a trained model.
     
     filePath : the path of the file containing the parameters and the architecture
                of the model.
     location : Where to load the model. (Default: cpu)
     """
-    # We assume that the parameters of the model are saved in GPU format.
     if location == 'gpu' and th.cuda.is_available():
-        state = th.load(filePath)
+        if gpu_device != th.cuda.current_device()\
+            and not (gpu_device >= 0 and gpu_device < th.cuda.device_count()):
+                gpu_device = th.cuda.current_device()
+                
+        state = th.load(filePath,map_location=lambda storage,loc:storage.cuda(gpu_device))
     elif location == 'cpu':
         state =  th.load(filePath,map_location=lambda storage,loc:storage)
     else:
