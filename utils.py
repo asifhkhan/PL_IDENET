@@ -58,6 +58,133 @@ def psnr(input,other,peakVal = None, average = False, nargout = 1):
         return (SNR, MSE) if nargout == 2 else SNR
 
 
+def periodicPad2D(input,pad = 0):
+    r"""Pads circularly the spatial dimensions (last two dimensions) of the 
+    input tensor. PAD specifies the amount of padding as [TOP, BOTTOM, LEFT, RIGHT].
+    If pad is an integer then each direction is padded by the same amount. In
+    order to achieve a different amount of padding in each direction of the 
+    tensor, pad needs to be a tuple."""
+          
+    # pad = [top,bottom,left,right]
+    
+    if isinstance(pad,int):
+        assert(pad >= 0), """Pad must be either a non-negative integer 
+        or a tuple."""
+        pad = (pad,)*4  
+        
+    sflag = False
+    if input.dim() == 1:
+        sflag = True
+        input = input.unsqueeze(1)
+             
+    assert(isinstance(pad,tuple) and len(pad) == 4), \
+    " A tuple with 4 values for padding is expected as input."
+        
+    sz = list(input.size())
+    
+    assert (pad[0] >= 0 and pad[1] >= 0 and pad[2] >= 0 and pad[3] >= 0), \
+            "Padding must be non-negative in each dimension."
+            
+    assert(pad[0] <= sz[-2] and pad[1] <= sz[-2] and \
+           pad[2] <= sz[-1] and pad[3] <= sz[-1]), \
+    "The padding values exceed the tensor's dimensions."
+    
+    sz[-1] = sz[-1] + sum(pad[2::])
+    sz[-2] = sz[-2] + sum(pad[0:2])
+    
+    out = th.empty(sz).type_as(input)
+    
+    # Copy the original tensor to the central part
+    out[...,pad[0]:out.size(-2)-pad[1], \
+        pad[2]:out.size(-1)-pad[3]] = input
+    
+    # Pad Top
+    if pad[0] != 0:
+        out[...,0:pad[0],:] = out[...,out.size(-2)-pad[1]-pad[0]:out.size(-2)-pad[1],:]
+    
+    # Pad Bottom
+    if pad[1] != 0:
+        out[...,out.size(-2)-pad[1]::,:] = out[...,pad[0]:pad[0]+pad[1],:]
+    
+    # Pad Left
+    if pad[2] != 0:
+        out[...,:,0:pad[2]] = out[...,:,out.size(-1)-pad[3]-pad[2]:out.size(-1)-pad[3]]
+    
+    # Pad Right
+    if pad[3] != 0:
+        out[...,:,out.size(-1)-pad[3]::] = out[...,:,pad[2]:pad[2]+pad[3]]    
+    
+    if sflag:
+        out.squeeze_()
+        
+    return out
+
+def periodicPad_transpose2D(input,crop = 0):
+    r"""Adjoint of the periodicPad2D operation which amounts to a special type
+    of cropping. CROP specifies the amount of cropping as [TOP, BOTTOM, LEFT, RIGHT].
+    If crop is an integer then each direction is cropped by the same amount. In
+    order to achieve a different amount of cropping in each direction of the 
+    tensor, crop needs to be a tuple."""          
+    
+    # crop = [top,bottom,left,right]
+    
+    if isinstance(crop,int):
+        assert(crop >= 0), """Crop must be either a non-negative integer 
+        or a tuple."""
+        crop = (crop,)*4  
+        
+    sflag = False
+    if input.dim() == 1:
+        sflag = True
+        input = input.unsqueeze(1)        
+             
+    assert(isinstance(crop,tuple) and len(crop) == 4), \
+    " A tuple with 4 values for padding is expected as input."
+        
+    sz = list(input.size())
+    
+    assert (crop[0] >= 0 and crop[1] >= 0 and crop[2] >= 0 and crop[3] >= 0), \
+            "Crop must be non-negative in each dimension."    
+    
+    assert (crop[0] + crop[1] <= sz[-2] and crop[2] + crop[3] <= sz[-1]), \
+            "Crop does not have valid values."
+    
+    out = input.clone()
+    
+    # Top
+    if crop[0] != 0:
+        out[...,crop[0]:crop[0]+crop[1],:] += out[...,-crop[1]::,:]
+    
+    # Bottom 
+    if crop[1] != 0:
+        out[...,-crop[0]-crop[1]:-crop[1],:] += out[...,0:crop[0],:]
+    
+    # Left 
+    if crop[2] != 0:
+        out[...,crop[2]:crop[2]+crop[3]] += out[...,-crop[3]::]
+    
+    # Right
+    if crop[3] != 0:
+        out[...,-crop[2]-crop[3]:-crop[3]] += out[...,0:crop[2]]
+    
+    if crop[1] == 0:
+        end_h = sz[-2]+1 
+    else:
+        end_h = sz[-2]-crop[1]
+        
+    if crop[3] == 0:
+        end_w = sz[-1]+1
+    else:
+        end_w = sz[-1]-crop[3]
+        
+    out = out[...,crop[0]:end_h,crop[2]:end_w]
+    
+    if sflag:
+        out.squeeze_()
+        
+    return out
+
+
 def zeroPad2D(input,pad = 0):
     r"""Pads with zeros the spatial dimensions (last two dimensions) of the 
     input tensor. PAD specifies the amount of padding as [TOP, BOTTOM, LEFT, RIGHT].
@@ -85,8 +212,8 @@ def zeroPad2D(input,pad = 0):
     assert (pad[0] >= 0 and pad[1] >= 0 and pad[2] >= 0 and pad[3] >= 0), \
             "Padding must be non-negative in each dimension."
             
-    assert(pad[0] < sz[-2] and pad[1] < sz[-2] and \
-           pad[2] < sz[-1] and pad[3] < sz[-1]), \
+    assert(pad[0] <= sz[-2] and pad[1] <= sz[-2] and \
+           pad[2] <= sz[-1] and pad[3] <= sz[-1]), \
     "The padding values exceed the tensor's dimensions."    
     
     sz[-1] = sz[-1] + sum(pad[2::])
@@ -163,8 +290,8 @@ def symmetricPad2D(input,pad = 0):
     assert (pad[0] >= 0 and pad[1] >= 0 and pad[2] >= 0 and pad[3] >= 0), \
             "Padding must be non-negative in each dimension."
             
-    assert(pad[0] < sz[-2] and pad[1] < sz[-2] and \
-           pad[2] < sz[-1] and pad[3] < sz[-1]), \
+    assert(pad[0] <= sz[-2] and pad[1] <= sz[-2] and \
+           pad[2] <= sz[-1] and pad[3] <= sz[-1]), \
     "The padding values exceed the tensor's dimensions."
     
     sz[-1] = sz[-1] + sum(pad[2::])
@@ -224,7 +351,6 @@ def symmetricPad_transpose2D(input,crop = 0):
         
     sz = list(input.size())
     
-    
     assert (crop[0] >= 0 and crop[1] >= 0 and crop[2] >= 0 and crop[3] >= 0), \
             "Crop must be non-negative in each dimension."    
     
@@ -275,7 +401,7 @@ def pad2D(input,pad=0,padType='zero'):
     If pad is an integer then each direction is padded by the same amount. In
     order to achieve a different amount of padding in each direction of the 
     tensor, pad needs to be a tuple. PadType specifies the type of padding.
-    Valid padding types are "zero" and "symmetric". """
+    Valid padding types are "zero","symmetric" and "periodic". """
     
     pad = formatInput2Tuple(pad,int,4)
     
@@ -286,6 +412,8 @@ def pad2D(input,pad=0,padType='zero'):
         return zeroPad2D(input,pad)
     elif padType == 'symmetric':
         return symmetricPad2D(input,pad)
+    elif padType == 'periodic':
+        return periodicPad2D(input,pad)
     else:
         raise NotImplementedError("Unknown padding type.")
 
@@ -306,6 +434,8 @@ def pad_transpose2D(input,pad=0,padType='zero'):
         return crop2D(input,pad)
     elif padType == 'symmetric':
         return symmetricPad_transpose2D(input,pad)
+    elif padType == 'periodic':
+        return periodicPad_transpose2D(input,pad)
     else:
         raise NotImplementedError("Uknown padding type.")
     
@@ -1347,8 +1477,26 @@ def sub2ind(shape,*args):
         idx += th.from_numpy(args[k]).long().mul(p[k])
         
     return idx
+
+def meshgrid(*args):
+    r""" Y,X,Z = meshgrid(np.arange(-3,4),np.arange(-2,3),np.arange(2,5))"""
+    s_ind = list()
+    siz =  len(args)
+    for t in args:
+        assert(isinstance(t,np.ndarray) and t.ndim == 1),"Input arguments must be 1D ndarrays."    
     
-def meshgrid(shape) :
+    for k in range(0,siz):
+        s_ind.append(args[k])
+        s_ind[k].shape = (1,)*k + (args[k].size,) + (1,)*(siz-1-k)
+    
+    for k in range(0,siz):
+        for m in range(0,siz):
+            if k != m :
+                s_ind[k] = s_ind[k].repeat(args[m].size,axis = m)
+    
+    return s_ind    
+    
+def meshgrid_(shape) :
     
     s_ind = list()
     
@@ -1662,3 +1810,219 @@ def loadmat(filename):
     data = spio.loadmat(filename, struct_as_record=False, squeeze_me=True)
     
     return _check_keys(data)
+
+
+def imblur2D_FrequencyDomain(input,kernel,padType="symmetric"):
+    r"""If the input and the kernel are both multichannel tensors then each
+    channel of the input is blurred by the corresponding channel of the 
+    kernel.Otherwise, if kernel has a single channel each channel of the input
+    is blurred by the same channel of the kernel."""
+    from pydl.cOps import cmul
+    
+    assert(input.dim() < 5),"The input must be at most a 4D tensor."
+    
+    while input.dim() < 3:
+        input = input.unsqueeze(0)
+    
+    assert(kernel.dim() < 4),"The blurring kernel must be at most a 3D tensor."
+    
+    while kernel.dim() < 3:
+        kernel = kernel.unsqueeze(0)
+    
+    assert(kernel.size(0) == 1 or kernel.size(0) == input.size(-3))," Invalid "\
+    +"blurring kernel dimensions."
+    
+    if input.dim() == 4:
+        kernel = kernel.unsqueeze(0)
+    
+    shape = tuple(kernel.shape)
+    
+    if padType != "periodic":
+        padding = getPad2RetainShape(shape[-2:],dilation = 1)
+        input = pad2D(input,padding,padType)
+   
+    kernel_pad = th.zeros_like(input)
+    if input.dim() == 4:
+        kernel_pad[...,0:shape[2],0:shape[3]] = kernel.expand(shape[0],input.size(1),*shape[-2:])
+    else:
+        kernel_pad[...,0:shape[1],0:shape[2]] = kernel.expand(input.size(0),*shape[-2:])
+    
+    s = tuple(int(i) for i in -np.floor(np.asarray(shape[-2:])//2))
+    if input.dim() == 4:
+        s = (0,0) + s
+    else:
+        s = (0,) + s    
+    kernel_pad = shift(kernel_pad,s,bc='circular')
+
+    K = th.rfft(kernel_pad,2)   
+        
+    out = th.irfft(cmul(th.rfft(input,2),K),2)
+    
+    if padType != "periodic":
+        out = crop2D(out,padding)
+    
+    return out
+
+def imblur_transpose2D_FrequencyDomain(input,kernel,padType="symmetric"):
+    
+    from pydl.cOps import cmul, conj
+    
+    assert(input.dim() < 5),"The input must be at most a 4D tensor."
+    
+    while input.dim() < 3:
+        input = input.unsqueeze(0)
+    
+    assert(kernel.dim() < 4),"The blurring kernel must be at most a 3D tensor."
+    
+    while kernel.dim() < 3:
+        kernel = kernel.unsqueeze(0)
+    
+    assert(kernel.size(0) == 1 or kernel.size(0) == input.size(-3))," Invalid "\
+    +"blurring kernel dimensions."
+    
+    if input.dim() == 4:
+        kernel = kernel.unsqueeze(0)
+    
+    shape = tuple(kernel.shape)
+    
+    if padType != "periodic":
+        padding = getPad2RetainShape(shape[-2:],dilation = 1)
+        input = pad2D(input,padding,"zero")
+   
+    kernel_pad = th.zeros_like(input)
+    if input.dim() == 4:
+        kernel_pad[...,0:shape[2],0:shape[3]] = kernel.expand(shape[0],input.size(1),*shape[-2:])
+    else:
+        kernel_pad[...,0:shape[1],0:shape[2]] = kernel.expand(input.size(0),*shape[-2:])
+    
+    s = tuple(int(i) for i in -np.floor(np.asarray(shape[-2:])//2))
+    if input.dim() == 4:
+        s = (0,0) + s
+    else:
+        s = (0,) + s    
+    kernel_pad = shift(kernel_pad,s,bc='circular')
+
+    K = conj(th.rfft(kernel_pad,2))
+        
+    out = th.irfft(cmul(th.rfft(input,2),K),2)
+    
+    if padType != "periodic":
+        out = pad_transpose2D(out,padding,padType)
+    
+    return out
+
+def imblur2D_SpatialDomain(input,kernel,padType="symmetric"):
+    r"""If the input and the kernel are both multichannel tensors then each
+    channel of the input is blurred by the corresponding channel of the 
+    kernel.Otherwise, if kernel has a single channel each channel of the input
+    is blurred by the same channel of the kernel."""
+    
+    assert(input.dim() < 5),"The input must be at most a 4D tensor."
+    
+    while input.dim() <  4:
+        input = input.unsqueeze(0)
+    
+    assert(kernel.dim() < 4),"The blurring kernel must at most a 3D tensor."
+    
+    while kernel.dim() < 4:
+        kernel = kernel.unsqueeze(0)
+    
+    channels = input.size(1)     
+    assert(kernel.size(1) == 1 or kernel.size(1) == channels),"Invalid "\
+    +"blurring kernel dimensions."
+    
+    if channels != 1:
+        kernel = kernel.expand(1,channels,*kernel.shape[-2:])
+    
+    kernel = reverse(reverse(kernel,dim=-1),dim=-2)
+    
+    padding = getPad2RetainShape(kernel.shape[-2:])
+    
+    input = pad2D(input,padding,padType)
+    
+    groups = 1    
+    if kernel.size(1) != 1:
+        kernel = kernel.view(channels,1,*kernel.shape[-2:])
+        groups = channels
+    
+    out = th.conv2d(input,kernel,groups = groups)
+        
+    return out
+
+def imblur_transpose2D_SpatialDomain(input,kernel,padType="symmetric"):
+    
+    assert(input.dim() < 5),"The input must be at most a 4D tensor."
+    
+    while input.dim() <  4:
+        input = input.unsqueeze(0)
+    
+    assert(kernel.dim() < 4),"The blurring kernel must at most a 3D tensor."
+    
+    while kernel.dim() < 4:
+        kernel = kernel.unsqueeze(0)
+    
+    channels = input.size(1)     
+    assert(kernel.size(1) == 1 or kernel.size(1) == channels),"Invalid "\
+    +"blurring kernel dimensions."
+    
+    if channels != 1:
+        kernel = kernel.expand(1,channels,*kernel.shape[-2:])
+    
+    kernel = reverse(reverse(kernel,dim=-1),dim=-2)
+    
+    padding = getPad2RetainShape(kernel.shape[-2:])
+        
+    groups = 1    
+    if kernel.size(1) != 1:
+        kernel = kernel.view(channels,1,*kernel.shape[-2:])
+        groups = channels
+    
+    out = th.conv_transpose2d(input,kernel,groups = groups)
+
+    return pad_transpose2D(out,padding,padType)
+ 
+def fftshift(x,dim = None):
+    r"""FFTSHIFT Shift zero-frequency component to the center of the spectrum.
+    For 1D complex tensors, FFTSHIFT(X) swaps the left and right halves of
+    X.  For 2D complex tensors, FFTSHIFT(X) swaps the first and third
+    quadrants and the second and fourth quadrants.  For N-D complex tensors
+    FFTSHIFT(X) swaps "half-spaces" of X along each dimension. 
+    A complex N-D tensor is a (N+1)-D tensor whose last dimension must be equal 
+    to 2.
+
+    FFTSHIFT(X,DIM) applies the FFTSHIFT operation along the 
+    dimension DIM.
+
+    FFTSHIFT is useful for visualizing the Fourier transform with
+    the zero-frequency component in the middle of the spectrum."""
+   
+    assert(th.is_tensor(x) and x.size(-1) == 2),"input must be a complex tensor."
+    
+    if dim is not None:
+        assert(isinstance(dim,int) and dim > -1 and dim < x.dim()),"Invalid specified dimension."
+        s = (0,)*x.dim()
+        s[dim] = x.size(dim)//2
+    else:
+        s = th.tensor(x.shape[0:-1],dtype = th.float32).div(2).floor()
+        s = tuple(int(i) for i in s) + (0,)
+    
+    
+    return shift(x,s,bc='circular')
+
+
+def gaussian_filter(shape,std):
+    
+    shape = formatInput2Tuple(shape,float,2)
+    siz = tuple((k-1)/2 for k in shape)
+    
+    [y,x] = meshgrid(np.arange(-siz[0],siz[0]+1),np.arange(-siz[1],siz[1]+1))
+    arg = -(x**2+y**2)/(2*std**2)
+    
+    h = np.exp(arg)
+    eps = np.spacing(1)
+    h[h < eps*np.max(h)]  = 0
+
+    if np.sum(h) != 0:
+        h = h/np.sum(h)
+    
+    return h
