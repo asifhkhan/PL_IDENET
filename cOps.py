@@ -139,6 +139,13 @@ def imag(input):
     
     return out
 
+def power(input,p):
+    mod = cabs(input)
+    theta = th.atan2(imag(input),real(input))
+    r = mod.pow(p)*th.cos(p*theta)
+    i = mod.pow(p)*th.sin(p*theta)
+    return th.cat((r.unsqueeze(-1),i.unsqueeze(-1)),dim=-1)
+
 def complex(real,imag = None):
     
     if imag is not None:
@@ -148,7 +155,6 @@ def complex(real,imag = None):
         imag = th.zeros_like(real)
         
     return th.cat((real.unsqueeze(-1),imag.unsqueeze(-1)),dim = -1)
-
 
 class Complex(object):
     
