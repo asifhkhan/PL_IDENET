@@ -148,3 +148,177 @@ def complex(real,imag = None):
         imag = th.zeros_like(real)
         
     return th.cat((real.unsqueeze(-1),imag.unsqueeze(-1)),dim = -1)
+
+
+class Complex(object):
+    
+    def __init__(self,real,imag = None):
+        
+        assert(th.is_tensor(real) and th.is_tensor(imag)),"Init values for "\
+        +"the complex tensor must be pytorch real tensors."        
+        
+        if imag is not None:
+            assert(real.shape == imag.shape),"Dimensions mismatch between real "\
+            +"and imaginary input tensors."
+        else:
+            imag = th.zeros_like(real)
+        
+        self.data  = th.cat((real.unsqueeze(-1),imag.unsqueeze(-1)),dim = -1)
+        self.shape = self.data.shape[0:-1]
+        
+    def real(self):
+        return self.data[...,0]
+    
+    def imag(self):
+        return self.data[...,1]
+    
+    def conj(self):
+        return Complex(self.data[...,0],-self.data[...,1])
+    
+    def conj_(self):
+        
+        self.data[...,1] = -self.data[...,1]
+        return self
+
+    def size(self,ind=None):
+        assert(ind is None or (ind >= 0 and ind < len(self.shape))),\
+        "dimension out of range."
+        return self.data.size(ind)
+    
+    def ndim(self):
+        return len(self.shape)
+    
+    def abs(self):
+        return self.data.pow(2).sum(dim=-1).sqrt()
+    
+    def add(self,other):
+        if isinstance(other,Complex):
+            out = self.data + other.data
+        else:
+            out = self.data.clone()
+            out[...,0] += other
+            
+        return Complex(out[...,0],out[...,1])
+    
+    def __add__(self,other):
+        return self.add(other)
+    
+    def __radd__(self,other):
+        return self.add(other)
+    
+    def __iadd__(self,other):
+        if isinstance(other,Complex):
+            self.data += other.data
+        else:
+            self.data[...,0] += other    
+        
+        return self
+
+    def sub(self,other):
+        if isinstance(other,Complex):
+            out = self.data - other.data
+        else:
+            out = self.data.clone()
+            out[...,0] -= other
+            
+        return Complex(out[...,0],out[...,1])    
+    
+    def __sub__(self,other):
+        return self.sub(other)
+    
+    def __rsub__(self,other):
+        return self.sub(other)
+    
+    def __isub__(self,other):
+        if isinstance(other,Complex):
+            self.data -= other.data
+        else:
+            self.data[...,0] -= other    
+        
+        return self    
+
+    def mul(self,other):
+        if isinstance(other,Complex):
+            real = self.data[...,0].mul(other.data[...,0])-self.data[...,1].mul(other.data[...,1])
+            imag = self.data[...,0].mul(other.data[...,1])+self.data[...,1].mul(other.data[...,0])
+            out = Complex(real,imag)
+        else:
+            out = self.data * other
+            out = Complex(out[...,0],out[...,1])
+        
+        return out
+
+    def __mul__(self,other):
+        return self.mul(other)
+    
+    def __rmul__(self,other):
+        return self.mul(other)
+    
+    def __imul__(self,other):
+        if isinstance(other,Complex):
+            real = self.data[...,0].mul(other.data[...,0])-self.data[...,1].mul(other.data[...,1])
+            imag = self.data[...,0].mul(other.data[...,1])+self.data[...,1].mul(other.data[...,0])
+            self.data[...,0] = real
+            self.data[...,1] = imag
+        else:
+            self.data *= other
+            
+        return self
+    
+    def div(self,other):
+        if isinstance(other,Complex):
+            num = self.mul(other.conj())
+            denom = (other.abs().data**2).unsqueeze(-1)
+            out = num.data/denom
+        else:
+            out = self.data/other
+            
+        return Complex(out.data[...,0],out.data[...,1])
+    
+    def __truediv__(self,other):
+        return self.div(other)
+    
+    def __rtruediv__(self,other):
+        if isinstance(other,Complex):
+            return other.div(self)
+        else:
+            denom = (self.abs()**2).unsqueeze(-1)
+            out = self.conj().mul(other)
+            out = out.div(denom)
+            return out
+        
+    def __itruediv__(self,other):
+        if isinstance(other,Complex):
+            num = self.mul(other.conj())
+            denom = (other.abs().data**2).unsqueeze(-1)
+            self.data = num.data/denom
+        else:
+            self.data /= other
+        
+        return self
+    
+    def inv(self):
+        return self.conj().div((self.abs()**2).unsqueeze(-1))
+    
+    def pow(self,power):
+        mod = self.abs()
+        theta = th.atan2(self.imag(),self.real())
+        real = mod.pow(power)*th.cos(power*theta)
+        imag = mod.pow(power)*th.sin(power*theta)
+        return Complex(real,imag)
+    
+    def __pow__(self,power):
+        return self.pow(power)
+
+    def __ipow__(self,power):
+        mod = self.abs()
+        theta = th.atan2(self.imag(),self.real())
+        self.data[...,0] = mod.pow(power)*th.cos(power*theta)
+        self.data[...,1] = mod.pow(power)*th.sin(power*theta)
+        return self
+    
+    def sqrt(self):
+        return self.pow(0.5)
+    
+    def __repr__(self):
+        return repr(self.data)
