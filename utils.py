@@ -1812,41 +1812,53 @@ def loadmat(filename):
     return _check_keys(data)
 
 
-def imblur2D_FrequencyDomain(input,kernel,padType="symmetric"):
+def imfilter2D_FrequencyDomain(input,kernel,padType="symmetric",mode="conv"):
     r"""If the input and the kernel are both multichannel tensors then each
-    channel of the input is blurred by the corresponding channel of the 
+    channel of the input is filtered by the corresponding channel of the 
     kernel.Otherwise, if kernel has a single channel each channel of the input
-    is blurred by the same channel of the kernel."""
+    is filtered by the same channel of the kernel."""
     from pydl.cOps import cmul
+
+    assert(mode == "conv" or mode == "corr"), "Valid filtering modes are"\
+    +" 'conv' and 'corr'."
     
     assert(input.dim() < 5),"The input must be at most a 4D tensor."
     
     while input.dim() < 3:
         input = input.unsqueeze(0)
     
-    assert(kernel.dim() < 4),"The blurring kernel must be at most a 3D tensor."
+    assert(kernel.dim() < 4),"The filtering kernel must be at most a 3D tensor."
     
     while kernel.dim() < 3:
         kernel = kernel.unsqueeze(0)
     
     assert(kernel.size(0) == 1 or kernel.size(0) == input.size(-3))," Invalid "\
-    +"blurring kernel dimensions."
+    +"filtering kernel dimensions."
     
     if input.dim() == 4:
         kernel = kernel.unsqueeze(0)
+
+    if mode != "conv":
+        kernel = reverse(reverse(kernel,dim=-1),dim=-2)
     
     shape = tuple(kernel.shape)
     
-    if padType != "periodic":
+    if padType == "symmetric" or padType == "zero":
         padding = getPad2RetainShape(shape[-2:],dilation = 1)
         input = pad2D(input,padding,padType)
-   
-    kernel_pad = th.zeros_like(input)
-    if input.dim() == 4:
-        kernel_pad[...,0:shape[2],0:shape[3]] = kernel.expand(shape[0],input.size(1),*shape[-2:])
-    else:
-        kernel_pad[...,0:shape[1],0:shape[2]] = kernel.expand(input.size(0),*shape[-2:])
     
+    if padType == "valid":
+        padding = getPad2RetainShape(shape[-2:],dilation = 1)
+    
+    if input.dim() == 4:
+        kernel_pad = th.zeros(shape[0],shape[1],input.size(2),input.size(3)).type_as(kernel)        
+        kernel_pad[...,0:shape[2],0:shape[3]] = kernel
+        del kernel
+    else:
+        kernel_pad = th.zeros(shape[0],input.size(1),input.size(2)).type_as(kernel)        
+        kernel_pad[...,0:shape[1],0:shape[2]] = kernel
+        del kernel
+        
     s = tuple(int(i) for i in -np.floor(np.asarray(shape[-2:])//2))
     if input.dim() == 4:
         s = (0,0) + s
@@ -1863,25 +1875,31 @@ def imblur2D_FrequencyDomain(input,kernel,padType="symmetric"):
     
     return out
 
-def imblur_transpose2D_FrequencyDomain(input,kernel,padType="symmetric"):
+def imfilter_transpose2D_FrequencyDomain(input,kernel,padType="symmetric",mode="conv"):
     
     from pydl.cOps import cmul, conj
+    
+    assert(mode == "conv" or mode == "corr"), "Valid filtering modes are"\
+    +" 'conv' and 'corr'."
     
     assert(input.dim() < 5),"The input must be at most a 4D tensor."
     
     while input.dim() < 3:
         input = input.unsqueeze(0)
     
-    assert(kernel.dim() < 4),"The blurring kernel must be at most a 3D tensor."
+    assert(kernel.dim() < 4),"The filtering kernel must be at most a 3D tensor."
     
     while kernel.dim() < 3:
         kernel = kernel.unsqueeze(0)
     
     assert(kernel.size(0) == 1 or kernel.size(0) == input.size(-3))," Invalid "\
-    +"blurring kernel dimensions."
+    +"filtering kernel dimensions."
     
     if input.dim() == 4:
         kernel = kernel.unsqueeze(0)
+    
+    if mode != "conv":
+        kernel = reverse(reverse(kernel,dim=-1),dim=-2)    
     
     shape = tuple(kernel.shape)
     
@@ -1889,11 +1907,14 @@ def imblur_transpose2D_FrequencyDomain(input,kernel,padType="symmetric"):
         padding = getPad2RetainShape(shape[-2:],dilation = 1)
         input = pad2D(input,padding,"zero")
    
-    kernel_pad = th.zeros_like(input)
     if input.dim() == 4:
-        kernel_pad[...,0:shape[2],0:shape[3]] = kernel.expand(shape[0],input.size(1),*shape[-2:])
+        kernel_pad = th.zeros(shape[0],shape[1],input.size(2),input.size(3)).type_as(kernel)        
+        kernel_pad[...,0:shape[2],0:shape[3]] = kernel
+        del kernel
     else:
-        kernel_pad[...,0:shape[1],0:shape[2]] = kernel.expand(input.size(0),*shape[-2:])
+        kernel_pad = th.zeros(shape[0],input.size(1),input.size(2)).type_as(kernel)        
+        kernel_pad[...,0:shape[1],0:shape[2]] = kernel
+        del kernel
     
     s = tuple(int(i) for i in -np.floor(np.asarray(shape[-2:])//2))
     if input.dim() == 4:
@@ -1906,37 +1927,44 @@ def imblur_transpose2D_FrequencyDomain(input,kernel,padType="symmetric"):
         
     out = th.irfft(cmul(th.rfft(input,2),K),2)
     
-    if padType != "periodic":
+    if padType == "symmetric" or padType == "zero":
         out = pad_transpose2D(out,padding,padType)
     
     return out
 
-def imblur2D_SpatialDomain(input,kernel,padType="symmetric"):
+def imfilter2D_SpatialDomain(input,kernel,padType="symmetric",mode="conv"):
     r"""If the input and the kernel are both multichannel tensors then each
-    channel of the input is blurred by the corresponding channel of the 
+    channel of the input is filtered by the corresponding channel of the 
     kernel.Otherwise, if kernel has a single channel each channel of the input
-    is blurred by the same channel of the kernel."""
+    is filtered by the same channel of the kernel."""
     
+    assert(mode == "conv" or mode == "corr"), "Valid filtering modes are"\
+    +" 'conv' and 'corr'."    
+   
     assert(input.dim() < 5),"The input must be at most a 4D tensor."
     
     while input.dim() <  4:
         input = input.unsqueeze(0)
     
-    assert(kernel.dim() < 4),"The blurring kernel must at most a 3D tensor."
+    assert(kernel.dim() < 4),"The filtering kernel must be at most a 3D tensor."
     
     while kernel.dim() < 4:
         kernel = kernel.unsqueeze(0)
     
     channels = input.size(1)     
     assert(kernel.size(1) == 1 or kernel.size(1) == channels),"Invalid "\
-    +"blurring kernel dimensions."
+    +"filtering kernel dimensions."
     
     if channels != 1:
         kernel = kernel.expand(1,channels,*kernel.shape[-2:])
     
-    kernel = reverse(reverse(kernel,dim=-1),dim=-2)
+    if mode == "conv":
+        kernel = reverse(reverse(kernel,dim=-1),dim=-2)
     
-    padding = getPad2RetainShape(kernel.shape[-2:])
+    if padType == "valid":
+        padding = 0
+    else:
+        padding = getPad2RetainShape(kernel.shape[-2:])
     
     input = pad2D(input,padding,padType)
     
@@ -1949,28 +1977,35 @@ def imblur2D_SpatialDomain(input,kernel,padType="symmetric"):
         
     return out
 
-def imblur_transpose2D_SpatialDomain(input,kernel,padType="symmetric"):
+def imfilter_transpose2D_SpatialDomain(input,kernel,padType="symmetric",mode="conv"):
+    
+    assert(mode == "conv" or mode == "corr"), "Valid filtering modes are"\
+    +" 'conv' and 'corr'."
     
     assert(input.dim() < 5),"The input must be at most a 4D tensor."
     
     while input.dim() <  4:
         input = input.unsqueeze(0)
     
-    assert(kernel.dim() < 4),"The blurring kernel must at most a 3D tensor."
+    assert(kernel.dim() < 4),"The filtering kernel must be at most a 3D tensor."
     
     while kernel.dim() < 4:
         kernel = kernel.unsqueeze(0)
     
     channels = input.size(1)     
     assert(kernel.size(1) == 1 or kernel.size(1) == channels),"Invalid "\
-    +"blurring kernel dimensions."
+    +"filtering kernel dimensions."
     
     if channels != 1:
         kernel = kernel.expand(1,channels,*kernel.shape[-2:])
     
-    kernel = reverse(reverse(kernel,dim=-1),dim=-2)
+    if mode == "conv":
+        kernel = reverse(reverse(kernel,dim=-1),dim=-2)
     
-    padding = getPad2RetainShape(kernel.shape[-2:])
+    if padType == "valid":
+        padding = 0
+    else:
+        padding = getPad2RetainShape(kernel.shape[-2:])
         
     groups = 1    
     if kernel.size(1) != 1:
@@ -1980,6 +2015,79 @@ def imblur_transpose2D_SpatialDomain(input,kernel,padType="symmetric"):
     out = th.conv_transpose2d(input,kernel,groups = groups)
 
     return pad_transpose2D(out,padding,padType)
+
+def wiener_deconv(input,blurKernel,regKernel,alpha):
+    r"""Multi Multichannel Deconvolution Wiener Filter for a batch of input
+    images. (Filtering is taking place in the Frequency domain under the 
+    assumption of periodic boundary conditions for the input image.)
+    
+    input :: tensor of size batch x channels x height x width.
+    blurKernel :: tensor of size batch x channels x b_height x b_width
+    regKernel :: tensor of size N x D x channels x r_height x r_widht
+    alpha :: tensor of size batch x N x channels.
+    
+    output : batch x N  x channels x height x width"""
+    
+    from pydl.cOps import cmul, cabs, conj
+    
+    assert(input.dim() < 5),"The input must be at most a 4D tensor."    
+    while input.dim() < 4:
+        input = input.unsqueeze(0)
+
+    batch = input.size(0)
+    channels = input.size(1)
+
+    assert(blurKernel.dim() < 5),"The blurring kernel must be at most a 4D tensor."
+    while blurKernel.dim() < 4:
+        blurKernel = blurKernel.unsqueeze(0)
+    
+    bshape = tuple(blurKernel.shape)
+    assert(bshape[0] in (1,batch) and bshape[1] in (1,channels)),"Invalid blurring kernel dimensions."
+            
+    assert(regKernel.dim() < 6),"The regularization kernel must be at most a 5D tensor."    
+    while regKernel.dim() < 5:
+        regKernel = regKernel.unsqueeze(0)    
+    
+    rshape = tuple(regKernel.shape)
+    assert(rshape[2] in (1,channels)),"Invalid regularization kernel dimensions."    
+    
+    N = rshape[0] # Number of wiener filters applied to each input image of size channels x height x width
+    
+    assert(alpha.shape == (batch,N,channels)),"Invalid dimensions for "\
+    +"alpha parameter. The expected shape of the tensor is {} x {} x {}".format(batch,N,channels)
+    
+    blurKernelP = th.zeros(bshape[0],bshape[1],input.size(2),input.size(3)).type_as(blurKernel)
+    blurKernelP[...,0:bshape[2],0:bshape[3]] = blurKernel
+    del blurKernel
+
+    bs = tuple(int(i) for i in -np.floor(np.asarray(bshape[-2:])//2))
+    bs = (0,0) + bs
+    blurKernelP = shift(blurKernelP,bs,bc='circular')    
+
+    regKernelP = th.zeros(rshape[0],rshape[1],rshape[2],input.size(2),input.size(3)).type_as(regKernel)
+    regKernelP[...,0:rshape[3],0:rshape[4]] = regKernel
+    del regKernel
+
+    rs = tuple(int(i) for i in -np.floor(np.asarray(rshape[-2:])//2))
+    rs = (0,0,0) + rs
+    regKernelP = shift(regKernelP,rs,bc='circular')    
+
+    K = th.rfft(blurKernelP,2) # batch x channels x height x width x 2
+    del blurKernelP
+    Y = cmul(conj(K),th.rfft(input,2)).unsqueeze(1) # batch x 1 x channels x height x width x 2
+    
+    K = cabs(K).pow(2).unsqueeze(-1) # batch x channels x height x width x 1
+    G = th.rfft(regKernelP,2) # N x D x channels x height x width x 2
+    del regKernelP
+    G = cabs(G).pow(2).sum(dim=1).unsqueeze(0) # 1 x N x channels x height x width
+    # batch x N x channels x height x width x 1
+    G = G.mul(alpha.unsqueeze(-1).unsqueeze(-1)).unsqueeze(-1) 
+    
+    G = K.unsqueeze(1)+G # batch x N x channels x height x width x 1
+    
+    del K
+    return th.irfft(Y.div(G),2) # batch x N x channels x height x width
+        
  
 def fftshift(x,dim = None):
     r"""FFTSHIFT Shift zero-frequency component to the center of the spectrum.
@@ -2026,3 +2134,14 @@ def gaussian_filter(shape,std):
         h = h/np.sum(h)
     
     return h
+
+def power_iteration(x0,A,numiter=20):
+    r"""Compute the largest eigenvalue of the operator A."""
+
+    for i in range(numiter):
+        x = A(x0)
+        x /= x.norm(p=2)
+        x0 = x
+    
+    return A(x0).mul(x0).sum()/x0.norm(p=2).pow(2)
+    

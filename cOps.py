@@ -18,7 +18,7 @@ def cmul(input,other):
     assert(input.size(-1) == 2 and other.size(-1) == 2), "Inputs must be "\
     +"complex tensors (their last dimension should be equal to two)."
     
-    assert(input.shape == other.shape), "Dimensions mismatch between inputs."
+    #assert(input.shape == other.shape), "Dimensions mismatch between inputs."
     
     real = input[...,0].mul(other[...,0])-input[...,1].mul(other[...,1])
     imag = input[...,0].mul(other[...,1])+input[...,1].mul(other[...,0])
@@ -32,9 +32,9 @@ def crmul(input,other):
     assert(th.is_tensor(input) and th.is_tensor(other)),"Inputs are expected "\
     +"to be tensors."
     
-    assert(input.size(-1) == 2 and input.shape[0:-1] == other.shape), "The "\
-    "first input must be a complex tensor (its last dimension should be equal "\
-    "to two) and the second input must be a real tensor."
+    assert(input.size(-1) == 2), "The first input must be a complex tensor "\
+    "(its last dimension should be equal to 2) and the second input must be a "\
+    "real tensor."
         
     return input.mul(other.unsqueeze(-1).expand(*input.shape))
 
@@ -65,7 +65,7 @@ def cdiv(input,other):
     assert(input.size(-1) == 2 and other.size(-1) == 2), "Inputs must be "\
     +"complex tensors (their last dimension should be equal to two)."
     
-    assert(input.shape == other.shape), "Dimensions mismatch between inputs."
+    #assert(input.shape == other.shape), "Dimensions mismatch between inputs."
     
     return cmul(input,conj(other)).div((cabs(other)**2).unsqueeze(-1))
 
@@ -76,9 +76,9 @@ def crdiv(input,other):
     assert(th.is_tensor(input) and th.is_tensor(other)),"Inputs are expected "\
     +"to be tensors."
     
-    assert(input.size(-1) == 2 and input.shape[0:-1] == other.shape), "The "\
-    "first input must be a complex tensor (its last dimension should be equal "\
-    "to two) and the second input must be a real tensor."
+    assert(input.size(-1) == 2), "The first input must be a complex tensor "\
+    "(its last dimension should be equal to 2) and the second input must be a "\
+    "real tensor."
         
     return input.div(other.unsqueeze(-1).expand(*input.shape))
 
@@ -89,9 +89,9 @@ def cradd(input,other):
     assert(th.is_tensor(input) and th.is_tensor(other)),"Inputs are expected "\
     +"to be tensors."
     
-    assert(input.size(-1) == 2 and input.shape[0:-1] == other.shape), "The "\
-    "first input must be a complex tensor (its last dimension should be equal "\
-    "to two) and the second input must be a real tensor."
+    assert(input.size(-1) == 2), "The first input must be a complex tensor "\
+    "(its last dimension should be equal to 2) and the second input must be a "\
+    "real tensor."
     
     out = input.clone()
     out[...,0] += other
@@ -146,6 +146,19 @@ def power(input,p):
     i = mod.pow(p)*th.sin(p*theta)
     return th.cat((r.unsqueeze(-1),i.unsqueeze(-1)),dim=-1)
 
+
+def norm(input,p=2,dim=None):
+
+    assert(th.is_tensor(input) and input.size(-1) == 2),"Input is expected "\
+    +"to be a complex tensor."
+    
+    out = cabs(input)
+    if dim is not None:
+        return out.norm(p=2,dim=dim)
+    else:
+        return out.norm(p=2)
+    
+
 def complex(real,imag = None):
     
     if imag is not None:
@@ -155,6 +168,8 @@ def complex(real,imag = None):
         imag = th.zeros_like(real)
         
     return th.cat((real.unsqueeze(-1),imag.unsqueeze(-1)),dim = -1)
+
+
 
 class Complex(object):
     
@@ -196,6 +211,13 @@ class Complex(object):
     
     def abs(self):
         return self.data.pow(2).sum(dim=-1).sqrt()
+    
+    def norm(self,p=2,dim=None):
+        out = self.abs()
+        if dim is None:
+            return out.norm(p)
+        else:
+            return out.norm(p,dim)
     
     def add(self,other):
         if isinstance(other,Complex):
