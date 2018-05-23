@@ -2023,7 +2023,7 @@ def wiener_deconv(input,blurKernel,regKernel,alpha):
     
     input :: tensor of size batch x channels x height x width.
     blurKernel :: tensor of size batch x channels x b_height x b_width
-    regKernel :: tensor of size N x D x channels x r_height x r_widht
+    regKernel :: tensor of size N x D x channels x r_height x r_width
     alpha :: tensor of size batch x N x channels.
     
     output : batch x N  x channels x height x width"""
