@@ -4,7 +4,7 @@
 Created on Sun Mar 25 22:50:33 2018
 
 @author: Stamatis Lefkimmiatis
-@email : s.lefkimmatis@skoltech.ru
+@email : s.lefkimmiatis@skoltech.ru
 """
 import torch as th
 import numpy as np
