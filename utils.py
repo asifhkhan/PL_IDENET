@@ -2026,7 +2026,7 @@ def wiener_deconv(input,blurKernel,regKernel,alpha):
     regKernel :: tensor of size N x D x channels x r_height x r_width
     alpha :: tensor of size batch x N x channels.
     
-    output : batch x N  x channels x height x width"""
+    output : batch x N x channels x height x width"""
     
     from pydl.cOps import cmul, cabs, conj
     
