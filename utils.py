@@ -1868,7 +1868,7 @@ def imfilter2D_FrequencyDomain(input,kernel,padType="symmetric",mode="conv"):
 
     K = th.rfft(kernel_pad,2)   
         
-    out = th.irfft(cmul(th.rfft(input,2),K),2)
+    out = th.irfft(cmul(th.rfft(input,2),K),2,signal_sizes=input.shape[-2:])
     
     if padType != "periodic":
         out = crop2D(out,padding)
@@ -1925,7 +1925,7 @@ def imfilter_transpose2D_FrequencyDomain(input,kernel,padType="symmetric",mode="
 
     K = conj(th.rfft(kernel_pad,2))
         
-    out = th.irfft(cmul(th.rfft(input,2),K),2)
+    out = th.irfft(cmul(th.rfft(input,2),K),2,signal_sizes=input.shape[-2:])
     
     if padType == "symmetric" or padType == "zero":
         out = pad_transpose2D(out,padding,padType)
@@ -2056,37 +2056,33 @@ def wiener_deconv(input,blurKernel,regKernel,alpha):
     assert(alpha.shape == (batch,N,channels)),"Invalid dimensions for "\
     +"alpha parameter. The expected shape of the tensor is {} x {} x {}".format(batch,N,channels)
     
-    blurKernelP = th.zeros(bshape[0],bshape[1],input.size(2),input.size(3)).type_as(blurKernel)
-    blurKernelP[...,0:bshape[2],0:bshape[3]] = blurKernel
+    K = th.zeros(bshape[0],bshape[1],input.size(2),input.size(3)).type_as(blurKernel)
+    K[...,0:bshape[2],0:bshape[3]] = blurKernel
     del blurKernel
 
     bs = tuple(int(i) for i in -np.floor(np.asarray(bshape[-2:])//2))
     bs = (0,0) + bs
-    blurKernelP = shift(blurKernelP,bs,bc='circular')    
+    K = shift(K,bs,bc='circular')    
+    K = th.rfft(K,2) # batch x channels x height x width x 2
 
-    regKernelP = th.zeros(rshape[0],rshape[1],rshape[2],input.size(2),input.size(3)).type_as(regKernel)
-    regKernelP[...,0:rshape[3],0:rshape[4]] = regKernel
+    G = th.zeros(rshape[0],rshape[1],rshape[2],input.size(2),input.size(3)).type_as(regKernel)
+    G[...,0:rshape[3],0:rshape[4]] = regKernel
     del regKernel
 
     rs = tuple(int(i) for i in -np.floor(np.asarray(rshape[-2:])//2))
     rs = (0,0,0) + rs
-    regKernelP = shift(regKernelP,rs,bc='circular')    
+    G = shift(G,rs,bc='circular')    
+    G = th.rfft(G,2) # N x D x channels x height x width x 2     
 
-    K = th.rfft(blurKernelP,2) # batch x channels x height x width x 2
-    del blurKernelP
     Y = cmul(conj(K),th.rfft(input,2)).unsqueeze(1) # batch x 1 x channels x height x width x 2
     
     K = cabs(K).pow(2).unsqueeze(-1) # batch x channels x height x width x 1
-    G = th.rfft(regKernelP,2) # N x D x channels x height x width x 2
-    del regKernelP
     G = cabs(G).pow(2).sum(dim=1).unsqueeze(0) # 1 x N x channels x height x width
     # batch x N x channels x height x width x 1
-    G = G.mul(alpha.unsqueeze(-1).unsqueeze(-1)).unsqueeze(-1) 
-    
-    G = K.unsqueeze(1)+G # batch x N x channels x height x width x 1
-    
+    G = G.mul(alpha.unsqueeze(-1).unsqueeze(-1)).unsqueeze(-1)  
+    G += K.unsqueeze(1) # batch x N x channels x height x width x 1 
     del K
-    return th.irfft(Y.div(G),2) # batch x N x channels x height x width
+    return th.irfft(Y.div(G),2,signal_sizes=input.shape[-2:]) # batch x N x channels x height x width
         
  
 def fftshift(x,dim = None):

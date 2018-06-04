@@ -8,10 +8,9 @@ Created on Fri Mar  2 11:33:22 2018
 """
 
 import torch as th
-#import numpy as np
+import numpy as np
 import math
 from pydl import utils
-
 
 class WeightNormalization(th.autograd.Function):
     
@@ -957,3 +956,161 @@ class grbf_LUT(th.autograd.Function):
             
         return grad_input, grad_weights, None, None, None
 
+class WienerFilter(th.autograd.Function):
+    
+    @staticmethod
+    def forward(ctx,input,blurKernel,weights,alpha):
+        r"""Multi Multichannel Deconvolution Wiener Filter for a batch of input
+        images. (Filtering is taking place in the Frequency domain under the 
+                 assumption of periodic boundary conditions for the input image.)
+    
+        input :: tensor of size batch x channels x height x width.
+        blurKernel :: tensor of size [1 | batch] x [1 | channels] x b_height x b_width
+        weights :: tensor of size [1 | N] x D x [1 | channels] x w_height x w_width
+        alpha :: tensor of size batch x N x [1 | channels].
+        
+        N is the number of different Wiener filters applied on the input
+        
+        For the weights and alpha parameters the notation [1 | C] means that
+        the specified dimension of the corresponding tensor can either have a 
+        single or C elements. In case that a single element is used then this 
+        element is shared across the dimension. 
+    
+        output : batch x N x channels x height x width
+        
+        output = F^H (B^H*F(input)/(|B|^2+exp(alpha)*|W|^2))
+        
+        """        
+        from pydl.cOps import cmul, cabs, conj      
+        
+        assert(input.dim() < 5),"The input must be at most a 4D tensor."    
+        while input.dim() < 4:
+            input = input.unsqueeze(0)
+
+        batch = input.size(0)
+        channels = input.size(1)
+
+        assert(blurKernel.dim() < 5),"The blurring kernel must be at most a 4D tensor."
+        while blurKernel.dim() < 4:
+            blurKernel = blurKernel.unsqueeze(0)
+    
+        bshape = tuple(blurKernel.shape)
+        assert(bshape[0] in (1,batch) and bshape[1] in (1,channels)),"Invalid blurring kernel dimensions."
+
+        assert(alpha.dim() in (2,3)), "The alpha parameter must be a 2D or 3D tensor."
+        if alpha.dim() == 2:
+            alpha = alpha.unsqueeze(-1)
+        
+        N = alpha.size(1) # Number of employed Wiener filters.
+        
+        assert(alpha.size(0) == batch and alpha.size(-1) in (1,channels)),\
+        "Invalid dimensions for the alpha parameter. The expected shape of the "\
+        +"tensor is {} x {} x [{}|{}]".format(batch,N,1,channels)
+        alpha = alpha.exp()        
+        
+        assert(weights.dim() > 3 and weights.dim() < 6),"The regularization "\
+        +"kernel must be a 4D or 5D tensor."    
+
+        if weights.dim() < 5:
+            weights = weights.unsqueeze(0)    
+    
+        wshape = tuple(weights.shape)
+        assert(wshape[0] in (1,N) and wshape[2] in (1,channels)),\
+        "Invalid regularization kernel dimensions."
+                
+        # Zero-padding of the blur kernel to match the input size
+        B = th.zeros(bshape[0],bshape[1],input.size(2),input.size(3)).type_as(blurKernel)
+        B[...,0:bshape[2],0:bshape[3]] = blurKernel
+        del blurKernel
+        # Circular shift of the zero-padded blur kernel
+        bs = tuple(int(i) for i in -np.floor(np.asarray(bshape[-2:])//2))
+        bs = (0,0) + bs
+        B = utils.shift(B,bs,bc='circular')            
+        # FFT of B
+        B = th.rfft(B,2) # tensor of size batch x channels x height x width x 2
+        
+        # Zero-padding of the spatial dimensions of the weights to match the input size    
+        G = th.zeros(wshape[0],wshape[1],wshape[2],input.size(2),input.size(3)).type_as(weights)
+        G[...,0:wshape[3],0:wshape[4]] = weights
+        del weights
+        
+        # circular shift of the zero-padded weights
+        ws = tuple(int(i) for i in -np.floor(np.asarray(wshape[-2:])//2))
+        ws = (0,0,0) + ws
+        G = utils.shift(G,ws,bc='circular')    
+        # FFT of G
+        G = th.rfft(G,2) # N x D x channels x height x width x 2
+        
+        Y = cmul(conj(B),th.rfft(input,2)).unsqueeze(1) # batch x 1 x channels x height x width x 2
+        
+        ctx.intermediate_results = tuple()
+        if ctx.needs_input_grad[2] or ctx.needs_input_grad[3]:
+            ctx.intermediate_results += (alpha,B,G,Y,wshape)
+        elif ctx.needs_input_grad[0]:
+            ctx.intermediate_results += (alpha,B,G)
+        
+        B = cabs(B).pow(2).unsqueeze(-1) # batch x channels x height x width x 1
+        G = cabs(G).pow(2).sum(dim=1).unsqueeze(0) # 1 x N x channels x height x width
+        G = G.mul(alpha.unsqueeze(-1).unsqueeze(-1)).unsqueeze(-1) # batch x N x channels x height x width x 1
+        G += B.unsqueeze(1) # batch x N x channels x height x width x 1
+        del B
+        return th.irfft(Y.div(G),2,signal_sizes = input.shape[-2:]) # batch x N x channels x height x width
+    
+    @staticmethod
+    def backward(ctx,grad_output):
+        from pydl.cOps import cmul, cabs, conj
+        
+        if ctx.needs_input_grad[2] or ctx.needs_input_grad[3]:
+            alpha,B,G,Y,wshape = ctx.intermediate_results
+            channels = Y.size(2)
+        elif ctx.needs_input_grad[0]:
+            alpha,B,G = ctx.intermediate_results
+                
+        grad_input = grad_weights = grad_alpha = None        
+        
+        if ctx.needs_input_grad[0] or ctx.needs_input_grad[2] or ctx.needs_input_grad[3] :
+            D = cabs(B).pow(2).unsqueeze(1) # batch x 1 x channels x height x width 
+            T = cabs(G).pow(2).sum(dim=1).unsqueeze(0) # 1 x N x channels x height x width 
+            T = T.mul(alpha.unsqueeze(-1).unsqueeze(-1)) # batch x N x channels x height x width             
+            D = D + T # batch x N x channels x height x width 
+            del T
+            D = D.unsqueeze(-1) # batch x N x channels x height x width x 1
+            
+        if ctx.needs_input_grad[0] or ctx.needs_input_grad[2]:
+            Z = th.rfft(grad_output,2) # batch x N x channels x height x width x 2
+                    
+        if ctx.needs_input_grad[0]:
+            grad_input = th.irfft(cmul(B.unsqueeze(1),Z).div(D),2,\
+                                  signal_sizes=grad_output.shape[-2:])
+            grad_input = grad_input.sum(dim=1)
+        
+        if 'B' in locals(): del B        
+        if ctx.needs_input_grad[2]:
+            ws = tuple(int(i) for i in -np.floor(np.asarray(wshape[-2:])//2))
+            ws = (0,0,0,0) + ws
+            U = cmul(conj(Z),Y.div(D.pow(2))) # batch x N x channels x height x width x 2
+            U = U[...,0].unsqueeze(-1).unsqueeze(2) # batch x N x D x channels x height x width x 1
+            U = U.mul(G.unsqueeze(0)) # batch x N x D x channels x height x width x 2
+            U = th.irfft(U,2,signal_sizes=grad_output.shape[-2:]) # batch x N x D x channels x height x width            
+            U = utils.shift_transpose(U,ws,bc='circular')
+            U = U[...,0:wshape[3],0:wshape[4]] # batch x N x D x channels x height x width
+            grad_weights = -2*U.mul(alpha.unsqueeze(2).unsqueeze(-1).unsqueeze(-1))
+            del U
+            grad_weights = grad_weights.sum(dim=0)
+            if wshape[2] == 1:
+                grad_weights = grad_weights.sum(dim=2,keepdim=True)
+            if wshape[0] == 1 and alpha.size(1) != 1:
+                grad_weights = grad_weights.sum(dim=0)                
+        
+        if 'Z' in locals(): del Z
+        if ctx.needs_input_grad[3]:
+            Y = Y.mul(cabs(G).pow(2).sum(dim=1).unsqueeze(0).unsqueeze(-1))
+            Y = Y.div(D.pow(2))
+            Y = th.irfft(Y,2,signal_sizes=grad_output.shape[-2:])
+            Y = Y.mul(-alpha.unsqueeze(-1).unsqueeze(-1))
+            Y = Y.mul(grad_output)
+            grad_alpha = Y.sum(dim=4).sum(dim=3)
+            if channels != 1 and alpha.size(-1) == 1:
+                grad_alpha = grad_alpha.sum(dim=2)
+        
+        return grad_input,None,grad_weights,grad_alpha

@@ -397,8 +397,6 @@ def grbf_lut(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False):
     
     return err_x, x_var.grad.data, x_numgrad, err_w, weights_var.grad.data, weights_numgrad
 
-
-
 def weightNormalization(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False,\
                         normalizedWeights=False,zeroMeanWeights=False):
     
@@ -416,7 +414,6 @@ def weightNormalization(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False,\
     x_numgrad = th.zeros_like(x).view(-1)
     perturb = x_numgrad.clone()
     cost = lambda input: cost_weightNormalization(input,alpha,normalizedWeights,zeroMeanWeights,grad_output)
-    
     
     for k in range(0,x.numel()):
         perturb[k]  = epsilon
@@ -459,6 +456,120 @@ def weightNormalization(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False,\
     
     return err_x, x_var.grad.data, x_numgrad, err_a, alpha_var.grad.data, alpha_numgrad    
 
+
+def WienerFilter(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False,\
+     sharedChannels=False,sharedFilters=False,alphaSharedChannels=False,
+     gradWeights=True,gradAlpha=True,gradInput=True):
+    
+    WienerFilterF = functional.WienerFilter.apply
+    
+    blurKernel = th.randn(5,5).type(dtype)
+    batch,channels,height,width = 2,3,50,50 
+    x = 200*th.randn(batch,channels,height,width).type(dtype)
+    
+    N = 4 # how many different wiener filters we use
+    D = 8 # how many regularization filters we use
+    if alphaSharedChannels:
+        alpha = np.random.randint(1,10,(batch,N))/100
+    else:
+        alpha = np.random.randint(1,10,(batch,N,channels))/100
+        
+    alpha = th.from_numpy(alpha).type(dtype)
+    alpha = alpha.log()
+    
+    wchannels = 1 if sharedChannels else channels        
+    if sharedFilters:
+        weights = th.randn(D,wchannels,3,3).type(dtype)
+    else:
+        weights = th.randn(N,D,wchannels,3,3).type(dtype)
+    
+    if GPU and th.cuda.is_available():
+        weights = weights.cuda()
+        x = x.cuda()
+        alpha = alpha.cuda()
+        blurKernel = blurKernel.cuda()
+        
+    grad_output = th.randn(x.size(0),N,*x.shape[1:]).type(dtype)
+    
+    if gradInput:
+        sz_x = x.size()
+        x_numgrad = th.zeros_like(x).view(-1)
+        perturb = x_numgrad.clone()
+        cost = lambda input: cost_WienerFilter(input,blurKernel,weights,alpha,grad_output)
+        
+        for k in range(0,x.numel()):
+            perturb[k]  = epsilon
+            loss1 = cost(x.view(-1).add(perturb).view(sz_x))
+            loss2 = cost(x.view(-1).add(-perturb).view(sz_x))
+            x_numgrad[k] = (loss1-loss2)/(2*perturb[k])
+            perturb[k] = 0
+            
+        x_numgrad = x_numgrad.view(sz_x)
+    
+    if gradWeights:
+        sz_w = weights.size()
+        weights_numgrad = th.zeros_like(weights).view(-1)
+        perturb = weights_numgrad.clone()
+        cost = lambda input: cost_WienerFilter(x,blurKernel,input,alpha,grad_output)
+        
+        for k in range(0,weights.numel()):
+            perturb[k]  = epsilon
+            loss1 = cost(weights.view(-1).add(perturb).view(sz_w))
+            loss2 = cost(weights.view(-1).add(-perturb).view(sz_w))
+            weights_numgrad[k] = (loss1-loss2)/(2*perturb[k])
+            perturb[k] = 0
+            
+        weights_numgrad = weights_numgrad.view(sz_w)
+    
+    if gradAlpha:        
+        sz_a = alpha.size()
+        alpha_numgrad = th.zeros_like(alpha).view(-1)
+        perturb = alpha_numgrad.clone()
+        cost = lambda input: cost_WienerFilter(x,blurKernel,weights,input,grad_output)
+        
+        for k in range(0,alpha.numel()):
+            perturb[k]  = epsilon
+            loss1 = cost(alpha.view(-1).add(perturb).view(sz_a))
+            loss2 = cost(alpha.view(-1).add(-perturb).view(sz_a))
+            alpha_numgrad[k] = (loss1-loss2)/(2*perturb[k])
+            perturb[k] = 0
+            
+        alpha_numgrad = alpha_numgrad.view(sz_a)
+    
+    if gradInput:
+        x.requires_grad_()
+    if gradWeights:
+        weights.requires_grad_()
+    if gradAlpha:
+        alpha.requires_grad_()
+    
+    y = WienerFilterF(x,blurKernel,weights,alpha)
+    y.backward(grad_output)
+
+    if gradInput:
+        err_x = th.norm(x.grad.data.view(-1) - x_numgrad.view(-1))/\
+            th.norm(x.grad.data.view(-1) + x_numgrad.view(-1))   
+    else:
+        err_x = None
+        x_numgrad = None
+            
+    if gradWeights:    
+        err_w = th.norm(weights.grad.data.view(-1) - weights_numgrad.view(-1))/\
+            th.norm(weights.grad.data.view(-1) + weights_numgrad.view(-1))    
+    else:
+        err_w = None
+        weights_numgrad = None
+        
+    if gradAlpha:
+        err_a = th.norm(alpha.grad.data.view(-1) - alpha_numgrad.view(-1))/\
+            th.norm(alpha.grad.data.view(-1) + alpha_numgrad.view(-1))      
+    else:
+        err_a = None
+        alpha_numgrad = None
+    
+    return err_x, x.grad, x_numgrad, err_w, weights.grad, weights_numgrad,\
+    err_a, alpha.grad, alpha_numgrad
+    
 def imloss(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False,loss='psnr',peakVal=255):
     
     imlossF = functional.imLoss.apply
@@ -537,6 +648,11 @@ def cost_weightNormalization(x,alpha,normalizedWeights,zeroMeanWeights,weights):
     F = functional.WeightNormalization.apply
     out = F(x,alpha,normalizedWeights,zeroMeanWeights)
     return out.mul(weights).sum()
+
+def cost_WienerFilter(x,blurKernel,weights,alpha,gweights):
+    F = functional.WienerFilter.apply
+    out = F(x,blurKernel,weights,alpha)
+    return out.mul(gweights).sum()
 
 def cost_imloss(x,y,loss,peakVal):
     F = functional.imLoss.apply
