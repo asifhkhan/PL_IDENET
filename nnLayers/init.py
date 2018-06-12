@@ -25,6 +25,33 @@ def dct(tensor):
         weights = weights.permute(3,2,0,1)
         tensor.data.copy_(weights)
 
+def dctMultiWiener(tensor):
+    r"""Initializes the input tensor with weights from the dct basis or dictionary."""
+    assert(tensor.dim() in (4,5)),"A 4D or 5D tensor is expected."
+    if tensor.dim() == 4:
+        output_features,input_channels,H,W = tensor.shape
+    else:
+        numFilters,output_features,input_channels,H,W = tensor.shape
+    
+    if H*W == output_features+1:
+        weights = utils.gen_dct2_kernel((H,W)).type_as(tensor)[1:,...]
+        if tensor.dim() == 4:
+            weights = weights.repeat(1,input_channels,1,1)
+        else:
+            weights = weights.unsqueeze_(0).repeat(numFilters,1,input_channels,1,1)
+    else:
+        if input_channels == 1:
+            weights = utils.odctndict((H,W),output_features+1)
+        else:
+            weights = utils.odctndict((H,W,input_channels),output_features+1)
+        weights = weights[:,1:output_features+1].type_as(tensor).view(H,W,input_channels,output_features)
+        weights = weights.permute(3,2,0,1)        
+        if tensor.dim() == 5:
+            weights = weights.unsqueeze_(0).repeat(numFilters,1,1,1,1)
+
+    tensor.data.copy_(weights)        
+        
+    
 def rbf_lut(centers,sigma,start,end,step):
     r"""Computes necessary data for the Look-up table of rbf computation."""
     data_samples = th.range(start,end,step).type_as(centers)

@@ -10,13 +10,79 @@ Created on Wed Mar 28 23:49:14 2018
 import torch as th
 from torch import nn
 from pydl.nnLayers import cascades
-from pydl.nnLayers.functional.functional import imLoss
+from pydl.nnLayers.functional.functional import imLoss, Pad2D, Crop2D, WienerFilter
 from pydl.nnLayers import init
 from pydl.utils import formatInput2Tuple, getPad2RetainShape
 #from collections import OrderedDict
 
 #from functools import reduce
 #prod = lambda f: reduce(lambda x,y : x*y,f)
+
+class WienerDeconvLayer(nn.Module):
+    
+    def __init__(self, kernel_size,\
+                 input_channels,\
+                 output_features,\
+                 numWienerFilters = 4,\
+                 sharedWienerFilters = False,\
+                 sharedChannels = True,\
+                 sharedAlphaChannels = True,
+                 lb = 1e-3,\
+                 ub = 1e-1,\
+                 pad = 'same',\
+                 padType = 'symmetric'):
+        
+        super(WienerDeconvLayer,self).__init__()
+        
+        if isinstance(pad,str) and pad == 'same' :
+            pad = getPad2RetainShape(kernel_size)
+        
+        if padType == 'periodic':
+            pad = (0,0,0,0)
+        
+        self.pad = formatInput2Tuple(pad,int,4)
+        self.padType = padType
+        
+        # Initialize conv regularization weights 
+        channels = 1 if sharedChannels else input_channels
+        
+        if sharedWienerFilters:
+            shape = (output_features,channels)+kernel_size
+        else:
+            shape = (numWienerFilters,output_features,channels)+kernel_size
+            
+        self.conv_weights = nn.Parameter(th.Tensor(th.Size(shape)))
+        init.dctMultiWiener(self.conv_weights)
+        
+        alpha = th.linspace(lb,ub,numWienerFilters).unsqueeze(-1).log()
+        if sharedAlphaChannels:            
+            shape = (numWienerFilters,1)
+        else:
+            alpha = alpha.repeat(1,input_channels)
+            shape = (numWienerFilters,input_channels)
+            
+        self.alpha = nn.Parameter(th.Tensor(th.Size(shape)))
+        self.alpha.data.copy_(alpha)
+        del alpha       
+    
+    def forward(self,input,blurKernel,stdn):
+        
+        input = Pad2D.apply(input,self.pad,self.padType)
+        input, cstdn = WienerFilter.apply(input,blurKernel,self.conv_weights,self.alpha)
+        
+        # compute the variance of the remaining colored noise
+        cstdn = th.sqrt(stdn.type_as(cstdn).unsqueeze(-1).pow(2).mul(cstdn.mean(dim=2)))
+        
+        return Crop2D.apply(input,self.pad), cstdn
+        
+
+    def __repr__(self):
+        return self.__class__.__name__ + '(' \
+            + 'kernel_size = ' + str(tuple(self.conv_weights.shape[-2:])) \
+            + ', input_channels = ' + str(self.conv_weights.size(-3)) \
+            + ', output_features = ' + str(self.conv_weights.size(-4)) \
+            + ', WienerFilters = ' + str(self.alpha.size(0)) + ')'
+        
            
 class ResidualRBFLayer(nn.Module):
     

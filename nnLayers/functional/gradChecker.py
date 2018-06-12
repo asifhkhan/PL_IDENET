@@ -459,20 +459,21 @@ def weightNormalization(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False,\
 
 def WienerFilter(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False,\
      sharedChannels=False,sharedFilters=False,alphaSharedChannels=False,
-     gradWeights=True,gradAlpha=True,gradInput=True):
+     gradWeights=True,gradAlpha=True,gradInput=True,color=True):
     
     WienerFilterF = functional.WienerFilter.apply
     
     blurKernel = th.randn(5,5).type(dtype)
-    batch,channels,height,width = 2,3,50,50 
+    batch,height,width = 2,50,50 
+    channels = 3 if color else 1
     x = 200*th.randn(batch,channels,height,width).type(dtype)
     
     N = 4 # how many different wiener filters we use
     D = 8 # how many regularization filters we use
     if alphaSharedChannels:
-        alpha = np.random.randint(1,10,(batch,N))/100
+        alpha = np.random.randint(1,10,(N,1))/100
     else:
-        alpha = np.random.randint(1,10,(batch,N,channels))/100
+        alpha = np.random.randint(1,10,(N,channels))/100
         
     alpha = th.from_numpy(alpha).type(dtype)
     alpha = alpha.log()
@@ -543,7 +544,7 @@ def WienerFilter(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False,\
     if gradAlpha:
         alpha.requires_grad_()
     
-    y = WienerFilterF(x,blurKernel,weights,alpha)
+    y = WienerFilterF(x,blurKernel,weights,alpha)[0]
     y.backward(grad_output)
 
     if gradInput:
@@ -651,7 +652,7 @@ def cost_weightNormalization(x,alpha,normalizedWeights,zeroMeanWeights,weights):
 
 def cost_WienerFilter(x,blurKernel,weights,alpha,gweights):
     F = functional.WienerFilter.apply
-    out = F(x,blurKernel,weights,alpha)
+    out = F(x,blurKernel,weights,alpha)[0]
     return out.mul(gweights).sum()
 
 def cost_imloss(x,y,loss,peakVal):

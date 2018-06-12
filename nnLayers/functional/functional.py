@@ -95,8 +95,8 @@ class WeightNormalization(th.autograd.Function):
 class Pad2D(th.autograd.Function):
     @staticmethod
     def forward(ctx,input,pad,padType = 'zero'):
-        assert(input.dim() == 4), "The dimensions of the input tensor are "\
-        +"expected to be equal to 4."
+        assert(input.dim() >= 2), "The dimensions of the input tensor are "\
+        +"expected to be larger or equal to 2."
         
         # No need to save the variables during inference
         if ctx.needs_input_grad[0]:            
@@ -118,8 +118,8 @@ class Pad2D(th.autograd.Function):
 class Pad_transpose2D(th.autograd.Function):
     @staticmethod
     def forward(ctx,input,pad,padType = 'zero'):
-        assert(input.dim() == 4), "The dimensions of the input tensor are "\
-        +"expected to be equal to 4."
+        assert(input.dim() >= 2), "The dimensions of the input tensor are "\
+        +"expected to be larger or equal to 2."
         
         # No need to save the variables during inference
         if ctx.needs_input_grad[0]:
@@ -142,8 +142,8 @@ class ZeroPad2D(th.autograd.Function):
     
     @staticmethod
     def forward(ctx,input,pad):
-        assert(input.dim() == 4), "The dimensions of the input tensor are "\
-        +"expected to be equal to 4."
+        assert(input.dim() >= 2), "The dimensions of the input tensor are "\
+        +"expected to be larger or equal to 2."
         
         # No need to save the variables during inference
         if ctx.needs_input_grad[0]:
@@ -166,8 +166,8 @@ class Crop2D(th.autograd.Function):
     
     @staticmethod
     def forward(ctx,input,crop):
-        assert(input.dim() == 4), "The dimensions of the input tensor are "\
-        +"expected to be equal to 4."
+        assert(input.dim() >= 2), "The dimensions of the input tensor are "\
+        +"expected to be larger or equal to 2."
         
         # No need to save the variables during inference
         if ctx.needs_input_grad[0]:
@@ -195,8 +195,8 @@ class SymmetricPad2D(th.autograd.Function):
     
     @staticmethod
     def forward(ctx,input,pad):
-        assert(input.dim() == 4), "The dimensions of the input tensor are "\
-        +"expected to be equal to 4."
+        assert(input.dim() >= 2), "The dimensions of the input tensor are "\
+        +"expected to be larger or equal to 2."
         
         # No need to save the variables during inference
         if ctx.needs_input_grad[0]:
@@ -224,7 +224,8 @@ class SymmetricPad_transpose2D(th.autograd.Function):
 
     @staticmethod
     def forward(ctx,input,crop):
-        assert(input.dim() == 4), "The input is expected to be a 4-D tensor."
+        assert(input.dim() >= 2),  "The dimensions of the input tensor are "\
+        +"expected to be larger or equal to 2."
         
         # No need to save the variables during inference
         if ctx.needs_input_grad[0]:
@@ -967,6 +968,186 @@ class WienerFilter(th.autograd.Function):
         input :: tensor of size batch x channels x height x width.
         blurKernel :: tensor of size [1 | batch] x [1 | channels] x b_height x b_width
         weights :: tensor of size [1 | N] x D x [1 | channels] x w_height x w_width
+        alpha :: tensor of size N x [1 | channels].
+        
+        N is the number of different Wiener filters applied on the input
+        
+        For the weights and alpha parameters the notation [1 | C] means that
+        the specified dimension of the corresponding tensor can either have a 
+        single or C elements. In case that a single element is used then this 
+        element is shared across the dimension. For the input parameters where 
+        their leading dimensions can have 1 element, these dimensions can be 
+        omitted.
+        
+        WienerFilter returns the output and a normalization constant (c) to be 
+        used for computing the standard deviation of the colored noise.
+        
+        output : batch x N x channels x height x width
+            
+            output = F^H (B^H*F(input)/(|B|^2+exp(alpha)*|W|^2))
+            
+        c : batch x N 
+        
+            c = trace(G^T*G)/N where G = F^H (B^H/(|B|^2+exp(alpha)*|W|^2)) F
+        
+        If y = Hx+n then output = Wy = WHx + Wn  where W is the linear Wiener 
+        filter. In this case we need to compute the variance of the noise 
+        n_color = Wn.
+        
+        var(n_color)=E(n^T*W^T*W*n) = E(n^T*n)*Trace(W^T*W)/N where N is the 
+        total number of spatial elements in y. Then we have that 
+        var(n_color) = var(n)*c where c = Trace(W^T*W)/N        
+        
+        """        
+        from pydl.cOps import cmul, cabs, conj      
+        
+        assert(input.dim() < 5),"The input must be at most a 4D tensor."    
+        while input.dim() < 4:
+            input = input.unsqueeze(0)
+
+        batch = input.size(0)
+        channels = input.size(1)
+
+        assert(blurKernel.dim() < 5),"The blurring kernel must be at most a 4D tensor."
+        while blurKernel.dim() < 4:
+            blurKernel = blurKernel.unsqueeze(0)
+    
+        bshape = tuple(blurKernel.shape)
+        assert(bshape[0] in (1,batch) and bshape[1] in (1,channels)),"Invalid blurring kernel dimensions."
+        
+        N = alpha.size(0) # Number of employed Wiener filters.
+        assert(alpha.dim() == 2 and alpha.size(-1) in (1,channels)),\
+        "Invalid dimensions for the alpha parameter. The expected shape of the "\
+        +"tensor is {} x [{}|{}]".format(N,1,channels)
+        alpha = alpha.exp()        
+        
+        assert(weights.dim() > 3 and weights.dim() < 6),"The regularization "\
+        +"kernel must be a 4D or 5D tensor."    
+
+        if weights.dim() < 5:
+            weights = weights.unsqueeze(0)    
+    
+        wshape = tuple(weights.shape)
+        assert(wshape[0] in (1,N) and wshape[2] in (1,channels)),\
+        "Invalid regularization kernel dimensions."
+                
+        # Zero-padding of the blur kernel to match the input size
+        B = th.zeros(bshape[0],bshape[1],input.size(2),input.size(3)).type_as(blurKernel)
+        B[...,0:bshape[2],0:bshape[3]] = blurKernel
+        del blurKernel
+        # Circular shift of the zero-padded blur kernel
+        bs = tuple(int(i) for i in -np.floor(np.asarray(bshape[-2:])//2))
+        bs = (0,0) + bs
+        B = utils.shift(B,bs,bc='circular')            
+        # FFT of B
+        B = th.rfft(B,2) # tensor of size batch x channels x height x width x 2
+        
+        # Zero-padding of the spatial dimensions of the weights to match the input size    
+        G = th.zeros(wshape[0],wshape[1],wshape[2],input.size(2),input.size(3)).type_as(weights)
+        G[...,0:wshape[3],0:wshape[4]] = weights
+        del weights
+        # circular shift of the zero-padded weights
+        ws = tuple(int(i) for i in -np.floor(np.asarray(wshape[-2:])//2))
+        ws = (0,0,0) + ws
+        G = utils.shift(G,ws,bc='circular')    
+        # FFT of G
+        G = th.rfft(G,2) # N x D x channels x height x width x 2
+        
+        Y = cmul(conj(B),th.rfft(input,2)).unsqueeze(1) # batch x 1 x channels x height x width x 2
+        
+        ctx.intermediate_results = tuple()
+        if ctx.needs_input_grad[2] or ctx.needs_input_grad[3]:
+            ctx.intermediate_results += (alpha,B,G,Y,wshape)
+        elif ctx.needs_input_grad[0]:
+            ctx.intermediate_results += (alpha,B,G)
+        
+        B = cabs(B).unsqueeze(-1) # batch x channels x height x width x 1
+        G = cabs(G).pow(2).sum(dim=1) # N x channels x height x width
+        G = G.mul(alpha.unsqueeze(-1).unsqueeze(-1)).unsqueeze(0).unsqueeze(-1) # 1 x N x channels x height x width x 1
+        G += B.pow(2).unsqueeze(1) # batch x N x channels x height x width x 1
+        S = (B.unsqueeze(1).div(G)).pow(2).squeeze(-1)
+        c = 2*S.sum(dim=-1).sum(dim=-1)-S[...,0,:].sum(dim=-1).sum(dim=-1)
+        if not input.size(-1)%2:
+            c = c - S[...,-1,:].sum(dim=-1).sum(dim=-1)
+        c = c/(input.size(-1)*input.size(-2))
+        return th.irfft(Y.div(G),2,signal_sizes = input.shape[-2:]), c
+        # output 1: batch x N x channels x height x width
+        # output 2: batch x N x channels 
+        
+        # Note: If sigma (of size batch) is the noise std of the input image, 
+        # then the noise std of the output images will be equal to 
+        # th.sqrt(sigma.unsqueeze(-1).pow(2).mul(c.mean(dim=2)))
+    
+    @staticmethod
+    def backward(ctx,grad_output,grad_c = None):
+        from pydl.cOps import cmul, cabs, conj
+                
+        if ctx.needs_input_grad[2] or ctx.needs_input_grad[3]:
+            alpha,B,G,Y,wshape = ctx.intermediate_results
+            channels = Y.size(2)
+        elif ctx.needs_input_grad[0]:
+            alpha,B,G = ctx.intermediate_results
+                
+        grad_input = grad_weights = grad_alpha = None        
+        
+        if ctx.needs_input_grad[0] or ctx.needs_input_grad[2] or ctx.needs_input_grad[3] :
+            D = cabs(B).pow(2).unsqueeze(1) # batch x 1 x channels x height x width 
+            T = cabs(G).pow(2).sum(dim=1).unsqueeze(0) # 1 x N x channels x height x width 
+            T = T.mul(alpha.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)) # batch x N x channels x height x width             
+            D = D + T # batch x N x channels x height x width 
+            del T
+            D = D.unsqueeze(-1) # batch x N x channels x height x width x 1
+            
+        if ctx.needs_input_grad[0] or ctx.needs_input_grad[2]:
+            Z = th.rfft(grad_output,2) # batch x N x channels x height x width x 2
+                    
+        if ctx.needs_input_grad[0]:
+            grad_input = th.irfft(cmul(B.unsqueeze(1),Z).div(D),2,\
+                                  signal_sizes=grad_output.shape[-2:])
+            grad_input = grad_input.sum(dim=1)
+        
+        if 'B' in locals(): del B        
+        if ctx.needs_input_grad[2]:
+            ws = tuple(int(i) for i in -np.floor(np.asarray(wshape[-2:])//2))
+            ws = (0,0,0,0) + ws
+            U = cmul(conj(Z),Y.div(D.pow(2))) # batch x N x channels x height x width x 2
+            U = U[...,0].unsqueeze(-1).unsqueeze(2) # batch x N x D x channels x height x width x 1
+            U = U.mul(G.unsqueeze(0)) # batch x N x D x channels x height x width x 2
+            U = th.irfft(U,2,signal_sizes=grad_output.shape[-2:]) # batch x N x D x channels x height x width            
+            U = utils.shift_transpose(U,ws,bc='circular')
+            U = U[...,0:wshape[3],0:wshape[4]] # batch x N x D x channels x height x width
+            grad_weights = -2*U.mul(alpha.unsqueeze(0).unsqueeze(2).unsqueeze(-1).unsqueeze(-1))
+            del U
+            grad_weights = grad_weights.sum(dim=0)
+            if wshape[2] == 1:
+                grad_weights = grad_weights.sum(dim=2,keepdim=True)
+            if wshape[0] == 1 and alpha.size(0) != 1:
+                grad_weights = grad_weights.sum(dim=0)                
+        
+        if 'Z' in locals(): del Z
+        if ctx.needs_input_grad[3]:
+            Y = Y.mul(cabs(G).pow(2).sum(dim=1).unsqueeze(0).unsqueeze(-1)) # batch x 1 x channels x height x width x 2
+            Y = Y.div(D.pow(2))
+            Y = th.irfft(Y,2,signal_sizes=grad_output.shape[-2:]) # batch x 1 x channels x height x width 
+            Y = Y.mul(-alpha.unsqueeze(0).unsqueeze(-1).unsqueeze(-1))
+            Y = Y.mul(grad_output)
+            grad_alpha = Y.sum(dim=4).sum(dim=3).sum(dim=0)
+            if channels != 1 and alpha.size(-1) == 1:
+                grad_alpha = grad_alpha.sum(dim=-1,keepdim=True)
+        
+        return grad_input,None,grad_weights,grad_alpha
+    
+class WienerFilter_(th.autograd.Function):
+    
+    @staticmethod
+    def forward(ctx,input,blurKernel,weights,alpha):
+        r"""Multi Multichannel Deconvolution Wiener Filter for a batch of input
+        images. (Filtering is taking place in the Frequency domain under the 
+                 assumption of periodic boundary conditions for the input image.)
+    
+        input :: tensor of size batch x channels x height x width.
+        blurKernel :: tensor of size [1 | batch] x [1 | channels] x b_height x b_width
+        weights :: tensor of size [1 | N] x D x [1 | channels] x w_height x w_width
         alpha :: tensor of size batch x N x [1 | channels].
         
         N is the number of different Wiener filters applied on the input
@@ -1033,7 +1214,6 @@ class WienerFilter(th.autograd.Function):
         G = th.zeros(wshape[0],wshape[1],wshape[2],input.size(2),input.size(3)).type_as(weights)
         G[...,0:wshape[3],0:wshape[4]] = weights
         del weights
-        
         # circular shift of the zero-padded weights
         ws = tuple(int(i) for i in -np.floor(np.asarray(wshape[-2:])//2))
         ws = (0,0,0) + ws

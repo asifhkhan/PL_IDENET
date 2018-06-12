@@ -1819,8 +1819,10 @@ def imfilter2D_FrequencyDomain(input,kernel,padType="symmetric",mode="conv"):
     is filtered by the same channel of the kernel."""
     from pydl.cOps import cmul
 
-    assert(mode == "conv" or mode == "corr"), "Valid filtering modes are"\
+    assert(mode in ("conv","corr")), "Valid filtering modes are"\
     +" 'conv' and 'corr'."
+    assert(padType in ("periodic","symmetric","zero","valid")), "Valid padType"\
+    +" values are 'periodic'|'symmetric'|'zero'|'valid'."
     
     assert(input.dim() < 5),"The input must be at most a 4D tensor."
     
@@ -1879,8 +1881,10 @@ def imfilter_transpose2D_FrequencyDomain(input,kernel,padType="symmetric",mode="
     
     from pydl.cOps import cmul, conj
     
-    assert(mode == "conv" or mode == "corr"), "Valid filtering modes are"\
+    assert(mode in ("conv","corr")), "Valid filtering modes are"\
     +" 'conv' and 'corr'."
+    assert(padType in ("periodic","symmetric","zero","valid")), "Valid padType"\
+    +" values are 'periodic'|'symmetric'|'zero'|'valid'."
     
     assert(input.dim() < 5),"The input must be at most a 4D tensor."
     
@@ -1938,8 +1942,10 @@ def imfilter2D_SpatialDomain(input,kernel,padType="symmetric",mode="conv"):
     kernel.Otherwise, if kernel has a single channel each channel of the input
     is filtered by the same channel of the kernel."""
     
-    assert(mode == "conv" or mode == "corr"), "Valid filtering modes are"\
-    +" 'conv' and 'corr'."    
+    assert(mode in ("conv","corr")), "Valid filtering modes are"\
+    +" 'conv' and 'corr'."
+    assert(padType in ("periodic","symmetric","zero","valid")), "Valid padType"\
+    +" values are 'periodic'|'symmetric'|'zero'|'valid'."    
    
     assert(input.dim() < 5),"The input must be at most a 4D tensor."
     
@@ -1979,8 +1985,10 @@ def imfilter2D_SpatialDomain(input,kernel,padType="symmetric",mode="conv"):
 
 def imfilter_transpose2D_SpatialDomain(input,kernel,padType="symmetric",mode="conv"):
     
-    assert(mode == "conv" or mode == "corr"), "Valid filtering modes are"\
+    assert(mode in ("conv","corr")), "Valid filtering modes are"\
     +" 'conv' and 'corr'."
+    assert(padType in ("periodic","symmetric","zero","valid")), "Valid padType"\
+    +" values are 'periodic'|'symmetric'|'zero'|'valid'."
     
     assert(input.dim() < 5),"The input must be at most a 4D tensor."
     

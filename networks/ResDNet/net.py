@@ -141,8 +141,6 @@ class ResDNet(nn.Module):
         
         output = L2Proj.apply(output,self.alpha,stdn)
         return self.bbproj(input-output)
-        
-
 
     def __repr__(self):
         return self.__class__.__name__ + '(' \
