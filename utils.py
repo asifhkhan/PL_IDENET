@@ -1861,7 +1861,7 @@ def imfilter2D_FrequencyDomain(input,kernel,padType="symmetric",mode="conv"):
         kernel_pad[...,0:shape[1],0:shape[2]] = kernel
         del kernel
         
-    s = tuple(int(i) for i in -np.floor(np.asarray(shape[-2:])//2))
+    s = tuple(int(i) for i in -(np.asarray(shape[-2:])//2))
     if input.dim() == 4:
         s = (0,0) + s
     else:
@@ -1920,7 +1920,7 @@ def imfilter_transpose2D_FrequencyDomain(input,kernel,padType="symmetric",mode="
         kernel_pad[...,0:shape[1],0:shape[2]] = kernel
         del kernel
     
-    s = tuple(int(i) for i in -np.floor(np.asarray(shape[-2:])//2))
+    s = tuple(int(i) for i in -(np.asarray(shape[-2:])//2))
     if input.dim() == 4:
         s = (0,0) + s
     else:
@@ -2068,7 +2068,7 @@ def wiener_deconv(input,blurKernel,regKernel,alpha):
     K[...,0:bshape[2],0:bshape[3]] = blurKernel
     del blurKernel
 
-    bs = tuple(int(i) for i in -np.floor(np.asarray(bshape[-2:])//2))
+    bs = tuple(int(i) for i in -(np.asarray(bshape[-2:])//2))
     bs = (0,0) + bs
     K = shift(K,bs,bc='circular')    
     K = th.rfft(K,2) # batch x channels x height x width x 2
@@ -2077,7 +2077,7 @@ def wiener_deconv(input,blurKernel,regKernel,alpha):
     G[...,0:rshape[3],0:rshape[4]] = regKernel
     del regKernel
 
-    rs = tuple(int(i) for i in -np.floor(np.asarray(rshape[-2:])//2))
+    rs = tuple(int(i) for i in -(np.asarray(rshape[-2:])//2))
     rs = (0,0,0) + rs
     G = shift(G,rs,bc='circular')    
     G = th.rfft(G,2) # N x D x channels x height x width x 2     
@@ -2148,4 +2148,120 @@ def power_iteration(x0,A,numiter=20):
         x0 = x
     
     return A(x0).mul(x0).sum()/x0.norm(p=2).pow(2)
+
+def getSubArrays(start,end,numSubArrays,length):
+    r""" We want to split the array A=[start:end] in numSubArrays arrays of 
+    equal  length so that all the elements in A are included in at least one of 
+    the created sub-arrays.
+    
+    Returns the starting (s) and ending points (e) of each sub-array."""
+    
+    assert(numSubArrays*length >= end), "The combination of the selected "\
+    +"number of sub-arrays and length cannot cover completely all the elements "\
+    +"between start and end."
+
+    p = end-length
+    s = np.int32(np.linspace(start,p,numSubArrays))
+    e = s + length
+    
+    mask = {}
+    for i in range(numSubArrays):
+        mask['m'+str(i+1)] = list(range(s[i],e[i]))
+    
+    
+    return mask
+
+
+def psf2otf(psf,otfSize):
+    r"""Transforms a given 2D psf (point spread function) to a 2D otf (optical 
+    transfer) function of a specified size"""
+    
+    assert(psf.dim() == 2 and len(otfSize) >= 2),"Invalid input for psf and/or otfSize."
+    assert(psf.size(0) <= otfSize[-2] and psf.size(1) <= otfSize[-1]),"The "\
+    +"spatial support of the otf must be equal or larger to that of the psf."
+    
+    otf = th.zeros(otfSize,dtype = psf.dtype)
+    otf[...,0:psf.size(0),0:psf.size(1)] = psf
+    
+    s = tuple(int(i) for i in -(np.asarray(psf.shape[0:])//2))
+    s = (0,)*(len(otfSize)-2)+s
+    otf = shift(otf,s,bc='circular')
+    otf = th.rfft(otf,2)
+    
+    return otf
+
+def edgetaper(input,psf):
+    
+    from pydl.cOps import cmul, conj
+    
+    assert(th.is_tensor(input) and th.is_tensor(psf)),"The inputs must be "\
+    +"pytorch tensors."
+    
+    assert(input.dim() < 5), "The input is expected to be at most a 4D tensor."
+    
+    assert(psf.dim()==2),"Only 2D psfs are accepted."
+    
+    beta = {}
+    
+    if psf.size(0) != 1:
+        psfProj = psf.sum(dim=1)
+        z = th.zeros(input.size(-2)-1,dtype=psf.dtype)
+        z[0:psf.size(0)] = psfProj
+        z = th.rfft(z,1,onesided=True)
+        z = th.irfft(cmul(z,conj(z)),1,onesided=True,signal_sizes=(input.size(-2)-1,))
+        z = th.cat((z,z[0:1]),dim=0).div(z.max())
+        beta['dim0'] = z.unsqueeze(-1)
+    
+    if psf.size(1) != 1:
+        psfProj = psf.sum(dim=0)
+        z = th.zeros(input.size(-1)-1,dtype=psf.dtype)
+        z[0:psf.size(1)] = psfProj
+        z = th.rfft(z,1,onesided=True)
+        z = th.irfft(cmul(z,conj(z)),1,onesided=True,signal_sizes=(input.size(-1)-1,))
+        z = th.cat((z,z[0:1]),dim=0).div(z.max())
+        beta['dim1'] = z.unsqueeze(0)
+
+    if len(beta.keys()) == 1:
+        alpha = 1 - beta[list(beta.keys())[0]]
+    else:
+        alpha = (1-beta['dim0'])*(1-beta['dim1'])
+    
+    while alpha.dim() < input.dim():
+        alpha = alpha.unsqueeze(0)
+            
+    otf = psf2otf(psf,input.shape)
+    
+    blurred_input = th.irfft(cmul(th.rfft(input,2),otf),2,signal_sizes = input.shape[-2:])
+    
+    output = alpha*input + (1-alpha)*blurred_input
+    
+    return output.clamp(input.min(),input.max()),alpha    
+
+def imGrad(input,bc='reflexive'):
+    r"""Computes the discrete gradient of an input batch of images of size 
+    B x C x H x W. The output is of size B x 2*C x H x W where in the 2nd 
+    dimension from 0:C the gradient with respect to the y-axis of each channel
+    of the image is stored, while in C:2C the gradient with respect to the 
+    x-axis is stored."""
+    assert(th.is_tensor(input) and input.dim() == 4), "A 4D tensor is expected "\
+    +"as input."
+    
+    return th.cat((shift(input,(0,0,-1,0),bc)-input,\
+                       shift(input,(0,0,0,-1),bc)-input),dim = 1)
+
+def imDivergence(input,bc='reflexive'):
+    r"""Computes the discrete divergence ( adjoint of the gradient) of an input 
+    batch of gradient images of size B x 2*C x H x W. The output is of size 
+    B x C x H x W."""
+    
+    assert(th.is_tensor(input) and input.dim() == 4), "A 4D tensor is expected "\
+    +"as input."
+    
+    assert(input.size(1)%2 == 0),"Invalid input dimensions: the second "\
+    +"dimension must be even sized."
+    idx = input.size(1)//2
+    
+    return shift_transpose(input[:,0:idx,...],(0,0,-1,0),bc)-input[:,0:idx,...]\
+                + shift_transpose(input[:,idx:,...],(0,0,0,-1),bc)-input[:,idx:,...]\
+    
     

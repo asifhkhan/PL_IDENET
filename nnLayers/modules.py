@@ -10,7 +10,8 @@ Created on Wed Mar 28 23:49:14 2018
 import torch as th
 from torch import nn
 from pydl.nnLayers import cascades
-from pydl.nnLayers.functional.functional import imLoss, Pad2D, Crop2D, WienerFilter, WeightNormalization
+from pydl.nnLayers.functional.functional import imLoss, Pad2D, Crop2D, \
+WienerFilter, WeightNormalization, WeightNormalization5D, EdgeTaper
 from pydl.nnLayers import init
 from pydl.utils import formatInput2Tuple, getPad2RetainShape
 #from collections import OrderedDict
@@ -26,30 +27,31 @@ class WienerDeconvLayer(nn.Module):
                  numWienerFilters = 4,\
                  sharedWienerFilters = False,\
                  sharedChannels = True,\
-                 sharedAlphaChannels = True,
+                 sharedAlphaChannels = True,\
                  lb = 1e-3,\
                  ub = 1e-1,\
-                 pad = 'same',\
+                 pad = True,\
                  padType = 'symmetric',\
+                 edgeTaper = True,\
                  scale = True,\
                  normalizedWeights = True,\
                  zeroMeanWeights = True):
         
         super(WienerDeconvLayer,self).__init__()
         
-        if isinstance(pad,str) and pad == 'same' :
-            if padType == 'periodic':
-                pad = (0,0,0,0)
-            else:
-                pad = getPad2RetainShape(kernel_size)
-            
-        self.pad = formatInput2Tuple(pad,int,4)
+        self.pad = pad
         self.padType = padType
+        self.edgetaper = edgeTaper
+        self.sharedWienerFilters = sharedWienerFilters
         self.normalizedWeights = normalizedWeights
         self.zeroMeanWeights = zeroMeanWeights
         
+        assert(numWienerFilters > 1),"More than one Wiener filter is expected."
+        
         # Initialize conv regularization weights 
         channels = 1 if sharedChannels else input_channels
+        
+        kernel_size = formatInput2Tuple(kernel_size,int,2)
         
         if sharedWienerFilters:
             shape = (output_features,channels)+kernel_size
@@ -60,7 +62,10 @@ class WienerDeconvLayer(nn.Module):
         init.dctMultiWiener(self.conv_weights)
         
         if scale and normalizedWeights:
-            self.scale = nn.Parameter(th.Tensor(output_features).fill_(1))   
+            if sharedWienerFilters:
+                self.scale = nn.Parameter(th.Tensor(output_features).fill_(0.1))   
+            else:
+                self.scale = nn.Parameter(th.Tensor(numWienerFilters,output_features).fill_(0.1))   
         else:
             self.register_parameter('scale', None)             
                 
@@ -78,16 +83,30 @@ class WienerDeconvLayer(nn.Module):
     
     def forward(self,input,blurKernel,stdn):
         
-        input = Pad2D.apply(input,self.pad,self.padType)
+        if self.pad:
+            pad = getPad2RetainShape(blurKernel.shape)
+            input = Pad2D.apply(input,pad,self.padType)
         
-        self.conv_weights = WeightNormalization(self.conv_weights,self.scale,\
-                                self.normalizedWeights,self.zeroMeanWeights)
-        input, cstdn = WienerFilter.apply(input,blurKernel,self.conv_weights,self.alpha)
+        if self.edgetaper:
+            input = EdgeTaper.apply(input,blurKernel)
+    
+        
+        if self.sharedWienerFilters:        
+            conv_weights = WeightNormalization.apply(self.conv_weights,self.scale,\
+                                        self.normalizedWeights,self.zeroMeanWeights)
+        else:
+            conv_weights = WeightNormalization5D.apply(self.conv_weights,self.scale,\
+                                        self.normalizedWeights,self.zeroMeanWeights)
+                    
+        output, cstdn = WienerFilter.apply(input,blurKernel,conv_weights,self.alpha)
         
         # compute the variance of the remaining colored noise in the output
         cstdn = th.sqrt(stdn.type_as(cstdn).unsqueeze(-1).pow(2).mul(cstdn.mean(dim=2)))
         
-        return Crop2D.apply(input,self.pad), cstdn
+        if self.pad:
+            output = Crop2D.apply(output,pad)
+        
+        return output, cstdn
         
 
     def __repr__(self):
@@ -95,7 +114,8 @@ class WienerDeconvLayer(nn.Module):
             + 'kernel_size = ' + str(tuple(self.conv_weights.shape[-2:])) \
             + ', input_channels = ' + str(self.conv_weights.size(-3)) \
             + ', output_features = ' + str(self.conv_weights.size(-4)) \
-            + ', WienerFilters = ' + str(self.alpha.size(0)) + ')'
+            + ', WienerFilters = ' + str(self.alpha.size(0)) \
+            + ', edgeTaper = ' + str(self.edgetaper) + ')'
         
            
 class ResidualRBFLayer(nn.Module):
@@ -142,7 +162,7 @@ class ResidualRBFLayer(nn.Module):
         
         # Initialize the scaling coefficients for the conv weight normalization
         if scale_f and normalizedWeights:
-            self.scale_f = nn.Parameter(th.Tensor(output_features).fill_(1))
+            self.scale_f = nn.Parameter(th.Tensor(output_features).fill_(0.1))
         else:
             self.register_parameter('scale_f', None)        
         
@@ -151,7 +171,7 @@ class ResidualRBFLayer(nn.Module):
             init.dct(self.convt_weights)
         
             if scale_t and normalizedWeights:
-                self.scale_t = nn.Parameter(th.Tensor(output_features).fill_(1))
+                self.scale_t = nn.Parameter(th.Tensor(output_features).fill_(0.1))
             else :
                 self.register_parameter('scale_t', None)
         

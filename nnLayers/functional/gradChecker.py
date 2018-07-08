@@ -456,6 +456,43 @@ def weightNormalization(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False,\
     
     return err_x, x_var.grad.data, x_numgrad, err_a, alpha_var.grad.data, alpha_numgrad    
 
+def EdgeTaper(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False):
+    
+    from pydl.utils import gaussian_filter    
+    
+    EdgeTaperF = functional.EdgeTaper.apply
+    
+    blurKernel = th.from_numpy(gaussian_filter((31,33),10)).type(dtype)
+    x =200*th.randn(2,3,50,50).type(dtype).abs()
+    
+    if GPU and th.cuda.is_available():
+        blurKernel = blurKernel.cuda()
+        x = x.cuda()
+        
+    grad_output = 200*th.randn(2,3,50,50).type(dtype)
+    
+    sz_x = x.size()
+    x_numgrad = th.zeros_like(x).view(-1)
+    perturb = x_numgrad.clone()
+    cost = lambda input : cost_edgetaper(input,blurKernel,grad_output)
+    
+    for k in range(0,x.numel()):
+        perturb[k] = epsilon
+        loss1 = cost(x.view(-1).add(perturb).view(sz_x))
+        loss2 = cost(x.view(-1).add(-perturb).view(sz_x))
+        x_numgrad[k] = (loss1-loss2)/(2*perturb[k])
+        perturb[k] = 0        
+    
+    x_numgrad = x_numgrad.view(sz_x)
+    
+    x.requires_grad_()
+    y = EdgeTaperF(x,blurKernel)
+    y.backward(grad_output)    
+    
+    err_x = th.norm(x.grad.view(-1) - x_numgrad.view(-1))/\
+        th.norm(x.grad.view(-1) + x_numgrad.view(-1))       
+    
+    return err_x, x.grad, x_numgrad
 
 def WienerFilter(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False,\
      sharedChannels=False,sharedFilters=False,alphaSharedChannels=False,
@@ -610,6 +647,46 @@ def imloss(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False,loss='psnr',peakVal
             
     return err_x, x_var.grad.data, x_numgrad
 
+def MSELoss(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False,peakVal=255,grad=False):
+    
+    MSELossF = functional.MSELoss.apply
+    
+    x = th.randn(4,3,40,40).abs().type(dtype)
+    x = x.div(x.max())*peakVal
+    y = th.randn(4,3,40,40).abs().type(dtype)
+    y = y.div(y.max())*peakVal
+        
+    if GPU and th.cuda.is_available():
+        x = x.cuda()
+        y = y.cuda()
+            
+    sz_x = x.size()
+    grad_output = th.ones(1).type_as(x)
+    
+    x_numgrad = th.zeros_like(x).view(-1)
+    perturb = x_numgrad.clone()
+    cost = lambda input: cost_MSELoss(input,y,grad)
+    
+    for k in range(0,x.numel()):
+        perturb[k]  = epsilon
+        loss1 = cost(x.view(-1).add(perturb).view(sz_x))
+        loss2 = cost(x.view(-1).add(-perturb).view(sz_x))
+        x_numgrad[k] = (loss1-loss2)/(2*perturb[k])
+        perturb[k] = 0
+        
+    x_numgrad = x_numgrad.view(sz_x)
+            
+    x.requires_grad_()
+    
+    z = MSELossF(x,y,grad)
+    z.backward(grad_output)
+    
+    err_x = th.norm(x.grad.view(-1) - x_numgrad.view(-1))/\
+            th.norm(x.grad.view(-1) + x_numgrad.view(-1))
+            
+    return err_x, x.grad, x_numgrad
+
+
 def cost_symmetricPad2D(x,pad):
     F = functional.SymmetricPad2D.apply
     out = F(x,pad)
@@ -659,3 +736,13 @@ def cost_imloss(x,y,loss,peakVal):
     F = functional.imLoss.apply
     out = F(x,y,peakVal,loss)
     return out
+
+def cost_MSELoss(x,y,grad,mode="normal"):
+    F = functional.MSELoss.apply
+    out = F(x,y,grad,mode)
+    return out
+
+def cost_edgetaper(x,blurKernel,weights):
+    F = functional.EdgeTaper.apply
+    out = F(x,blurKernel)
+    return out.mul(weights).sum()

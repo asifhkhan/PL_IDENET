@@ -91,6 +91,84 @@ class WeightNormalization(th.autograd.Function):
         
         return grad_input, grad_alpha, None, None
 
+class WeightNormalization5D(th.autograd.Function):
+    
+    @staticmethod
+    def forward(ctx,input, alpha = None, normalizedWeights=False,\
+                zeroMeanWeights=False):
+        
+        assert(input.dim() == 5), "A 5D input tensor is expected but instead "\
+        +"a tensor of %d dimensions was provided."%input.dim()        
+        batch = input.size(0)*input.size(1)              
+        sz = input.shape[2:]
+        out = input.view(batch,*sz).clone()
+                
+        if not normalizedWeights or alpha is None:
+            alpha = th.ones(1).type_as(input)
+            a_shape = None
+        else:
+            a_shape = alpha.shape
+            alpha = alpha.exp().view(-1,1,1,1)
+        
+        ctx.intermediate_results = zeroMeanWeights, normalizedWeights, a_shape
+
+        assert(alpha.numel() in (1,batch)),"The 'alpha' param must be a "\
+               +"tensor of either size 1 or size %r."%(batch)
+               
+        if zeroMeanWeights:
+            # Substract the mean value from each in_channels x kH x kW filter
+            out = out.add(-out.view(batch,-1).mean(1).view(-1,1,1,1))
+                            
+        if normalizedWeights:
+            # Compute the l2 norm for each in_channels x kH x kW filter
+            w_norm = out.view(batch,-1).norm(p=2,dim=1).view(-1,1,1,1)
+        else:
+            w_norm = th.ones(1).type(out.type())
+        
+        # No need to save the variables during inference
+        if ctx.needs_input_grad[0] or ctx.needs_input_grad[1]:
+            ctx.save_for_backward(out,alpha,w_norm)
+                
+        # Normalize the filters so that each one has an l2-norm equal to alpha
+        return out.div(w_norm).mul(alpha).view(*input.shape)
+    
+    @staticmethod
+    def backward(ctx,grad_output):
+        
+        out, alpha, w_norm = ctx.saved_variables
+        zeroMeanWeights, normalizedWeights, a_shape = ctx.intermediate_results
+        batch = grad_output.size(0)*grad_output.size(1)
+        sz = grad_output.shape[2:]
+        
+        grad_input = grad_alpha = None
+        
+        grad_output = grad_output.view(batch,*sz).mul(alpha).div(w_norm)
+                
+        if ctx.needs_input_grad[1] and normalizedWeights:
+            grad_alpha = grad_output.mul(out).view(batch,-1).sum(1)
+            if alpha.numel() == 1:
+                grad_alpha = grad_alpha.sum()      
+            grad_alpha = grad_alpha.view(a_shape)
+                        
+        if ctx.needs_input_grad[0]:
+            if not normalizedWeights and zeroMeanWeights:
+                grad_input = grad_output - grad_output.view(batch,-1).mean(1).view(-1,1,1,1)
+            
+            if normalizedWeights and not zeroMeanWeights:
+                out = out.div(w_norm)
+                ip = grad_output.mul(out).view(batch,-1).sum(1)
+                grad_input = grad_output - out.mul(ip.view(-1,1,1,1))          
+            
+            if normalizedWeights and zeroMeanWeights:
+                out = out.div(w_norm)
+                ip = grad_output.mul(out).view(batch,-1).sum(1)
+                grad_input = grad_output - out.mul(ip.view(-1,1,1,1))                
+                grad_input -= grad_input.view(batch,-1).mean(1).view(-1,1,1,1)
+            
+            if not normalizedWeights and not zeroMeanWeights:
+                grad_input = grad_output
+        
+        return grad_input.view(*grad_output.shape), grad_alpha, None, None
 
 class Pad2D(th.autograd.Function):
     @staticmethod
@@ -600,6 +678,87 @@ class SVL2Proj(th.autograd.Function):
                         
         return grad_input,grad_alpha,None
 
+class MSELoss(th.autograd.Function):
+    @staticmethod
+    def forward(ctx,input,target,grad=False,mode="normal"):
+        r"""Y = MSELOSS(X, Xgt) computes the loss incurred by the estimated
+        images X given the ground-truth images Xgt.
+
+        The estimated images X and the ground-truth images Xgt are organised as 
+        tensors of dimensions B x C x H x W. The first dimension is the batch size, 
+        C is the number of image channels and H and W, are the spatial dimensions 
+        and correspond to the height and width of the image.
+        
+        If grad = False, then the loss function is defined as the MSE of the 
+        image intensities:
+            
+             B
+        L = Sum ||X_b-Xgt_b||^2/(B*C*H*W),
+            b=1
+        
+        while if grad = True, then the loss function is defined as the 
+        combination of the MSE of the image intensities and the MSE of the 
+        gradient coefficients, i.e.,
+        
+             B
+        L = Sum (||X_b-Xgt_b||^2 + ||G(X_b-Xgt_b)||^2 )/(B*C*H*W),
+            b=1
+        
+        where G denotes the gradient operator. The purpose of the second term 
+        is to enforce that the edges of the reconstructed image are close to 
+        those of the ground-truth. 
+        
+        If mode != normal then while the training uses the MSE loss, in screen
+        the PSNR is printed.        
+        """
+        assert(input.shape == target.shape), "The tensor inputs must be "\
+        "of the same size."
+        
+        assert(input.dim() <= 4), "Tensor must be at maximum of 4 dimensions."
+        
+        while input.dim() < 4:
+            input = input.unsqueeze(0)
+        
+        while target.dim() < 4:
+            target = target.unsqueeze(0)        
+    
+        err = input-target
+        
+        if ctx.needs_input_grad[0] :
+            ctx.save_for_backward(err)
+            ctx.intermediate_results = grad, 
+        
+        if mode == "normal":
+            loss = err.norm(p=2).pow(2).div(err.numel())
+            if grad:
+                loss += utils.imGrad(err,bc='reflexive').norm(p=2).pow(2).div(err.numel())
+        else:
+            N = err[0].numel()
+            batch = err.size(0)
+            normE = err.view(batch,-1).norm(p=2,dim=1)
+            M = target.view(batch,-1).max(dim=1)[0]
+            loss = -20*th.log10(M*math.sqrt(N)/normE)
+            loss = loss.mean()
+        
+        return loss   
+
+    @staticmethod
+    def backward(ctx,grad_output):
+        
+        grad_input = None
+        
+        if ctx.needs_input_grad[0]:
+            err, = ctx.saved_variables
+            grad, = ctx.intermediate_results
+            grad_input = err
+            if grad :
+                grad_input += utils.imDivergence(utils.imGrad(err,bc='reflexive'))
+            
+            grad_input = 2*grad_input.mul(grad_output).div(err.numel())
+        
+        return grad_input,None,None,None
+        
+
 class imLoss(th.autograd.Function) :
     r"""  Y = IMLOSS(X, Xgt) computes the loss incurred by the estimated
     images X given the ground-truth images Xgt.
@@ -655,8 +814,11 @@ class imLoss(th.autograd.Function) :
         N = input[0].numel()
         err = input - other
         
+        if peakVal is None:
+            peakVal = other.view(batch,-1).max(dim=1)[0]        
+        
         ctx.save_for_backward(err)
-        ctx.intermediate_results = peakVal, loss
+        ctx.intermediate_results = peakVal,loss
         
         if loss == 'psnr' or (loss == 'l1' and mode == 'validation'):
             normE = err.view(batch,-1).norm(p=2,dim=1)
@@ -1036,7 +1198,7 @@ class WienerFilter(th.autograd.Function):
         B[...,0:bshape[2],0:bshape[3]] = blurKernel
         del blurKernel
         # Circular shift of the zero-padded blur kernel
-        bs = tuple(int(i) for i in -np.floor(np.asarray(bshape[-2:])//2))
+        bs = tuple(int(i) for i in -(np.asarray(bshape[-2:])//2))
         bs = (0,0) + bs
         B = utils.shift(B,bs,bc='circular')            
         # FFT of B
@@ -1047,7 +1209,7 @@ class WienerFilter(th.autograd.Function):
         G[...,0:wshape[3],0:wshape[4]] = weights
         del weights
         # circular shift of the zero-padded weights
-        ws = tuple(int(i) for i in -np.floor(np.asarray(wshape[-2:])//2))
+        ws = tuple(int(i) for i in -(np.asarray(wshape[-2:])//2))
         ws = (0,0,0) + ws
         G = utils.shift(G,ws,bc='circular')    
         # FFT of G
@@ -1108,7 +1270,7 @@ class WienerFilter(th.autograd.Function):
         
         if 'B' in locals(): del B        
         if ctx.needs_input_grad[2]:
-            ws = tuple(int(i) for i in -np.floor(np.asarray(wshape[-2:])//2))
+            ws = tuple(int(i) for i in -(np.asarray(wshape[-2:])//2))
             ws = (0,0,0,0) + ws
             U = cmul(conj(Z),Y.div(D.pow(2))) # batch x N x channels x height x width x 2
             U = U[...,0].unsqueeze(-1).unsqueeze(2) # batch x N x D x channels x height x width x 1
@@ -1204,7 +1366,7 @@ class WienerFilter_(th.autograd.Function):
         B[...,0:bshape[2],0:bshape[3]] = blurKernel
         del blurKernel
         # Circular shift of the zero-padded blur kernel
-        bs = tuple(int(i) for i in -np.floor(np.asarray(bshape[-2:])//2))
+        bs = tuple(int(i) for i in -(np.asarray(bshape[-2:])//2))
         bs = (0,0) + bs
         B = utils.shift(B,bs,bc='circular')            
         # FFT of B
@@ -1215,7 +1377,7 @@ class WienerFilter_(th.autograd.Function):
         G[...,0:wshape[3],0:wshape[4]] = weights
         del weights
         # circular shift of the zero-padded weights
-        ws = tuple(int(i) for i in -np.floor(np.asarray(wshape[-2:])//2))
+        ws = tuple(int(i) for i in -(np.asarray(wshape[-2:])//2))
         ws = (0,0,0) + ws
         G = utils.shift(G,ws,bc='circular')    
         # FFT of G
@@ -1266,7 +1428,7 @@ class WienerFilter_(th.autograd.Function):
         
         if 'B' in locals(): del B        
         if ctx.needs_input_grad[2]:
-            ws = tuple(int(i) for i in -np.floor(np.asarray(wshape[-2:])//2))
+            ws = tuple(int(i) for i in -(np.asarray(wshape[-2:])//2))
             ws = (0,0,0,0) + ws
             U = cmul(conj(Z),Y.div(D.pow(2))) # batch x N x channels x height x width x 2
             U = U[...,0].unsqueeze(-1).unsqueeze(2) # batch x N x D x channels x height x width x 1
@@ -1294,3 +1456,71 @@ class WienerFilter_(th.autograd.Function):
                 grad_alpha = grad_alpha.sum(dim=2)
         
         return grad_input,None,grad_weights,grad_alpha
+
+
+class EdgeTaper(th.autograd.Function):
+    
+    @staticmethod
+    def forward(ctx,input,psf):        
+        from pydl.cOps import cmul, conj
+
+        assert(input.dim() < 5), "The input is expected to be at most a 4D tensor."
+        while input.dim() < 4 :
+            input = input.unsqueeze(0)
+        
+        assert(psf.dim()==2),"Only 2D psfs are accepted."
+        
+        beta = {}
+        
+        if psf.size(0) != 1:
+            psfProj = psf.sum(dim=1)
+            z = th.zeros(input.size(-2)-1,dtype=psf.dtype)
+            z[0:psf.size(0)] = psfProj
+            z = th.rfft(z,1,onesided=True)
+            z = th.irfft(cmul(z,conj(z)),1,onesided=True,signal_sizes=(input.size(-2)-1,))
+            z = th.cat((z,z[0:1]),dim=0).div(z.max())
+            beta['dim0'] = z.unsqueeze(-1)
+        
+        if psf.size(1) != 1:
+            psfProj = psf.sum(dim=0)
+            z = th.zeros(input.size(-1)-1,dtype=psf.dtype)
+            z[0:psf.size(1)] = psfProj
+            z = th.rfft(z,1,onesided=True)
+            z = th.irfft(cmul(z,conj(z)),1,onesided=True,signal_sizes=(input.size(-1)-1,))
+            z = th.cat((z,z[0:1]),dim=0).div(z.max())
+            beta['dim1'] = z.unsqueeze(0)
+    
+        if len(beta.keys()) == 1:
+            alpha = 1 - beta[list(beta.keys())[0]]
+        else:
+            alpha = (1-beta['dim0'])*(1-beta['dim1'])
+        
+        while alpha.dim() < input.dim():
+            alpha = alpha.unsqueeze(0)
+                
+        otf = utils.psf2otf(psf,input.shape)
+        
+        blurred_input = th.irfft(cmul(th.rfft(input,2),otf),2,\
+                                 signal_sizes = input.shape[-2:])
+        
+        output = alpha*input + (1-alpha)*blurred_input
+                        
+        if ctx.needs_input_grad[0]:
+            # mask = ((output >= input.min())+(output <= input.max())).eq(2)
+            mask = th.__and__(output >= input.min(),output <= input.max())
+            ctx.intermediate_results = alpha,otf,mask
+        
+        return output.clamp(input.min(),input.max())
+    
+    @staticmethod
+    def backward(ctx,grad_output):
+        from pydl.cOps import cmul,conj
+        
+        alpha,otf,mask = ctx.intermediate_results        
+        
+        grad_input = mask.type_as(grad_output)*grad_output
+
+        grad_input = alpha*grad_input + th.irfft(cmul(th.rfft((1-alpha)\
+                *grad_input,2),conj(otf)),2,signal_sizes = grad_input.shape[-2:])
+        
+        return grad_input, None
