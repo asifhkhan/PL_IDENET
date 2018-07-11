@@ -11,7 +11,8 @@ import os
 import numpy as np
 import torch as th
 import torch.utils.data as data
-from pydl.utils import gen_imdb_BSDS500_fromList, imfilter2D_SpatialDomain
+from pydl.utils import gen_imdb_BSDS500_fromList, imfilter2D_SpatialDomain,\
+getPad2RetainShape,crop2D
 from matplotlib import image as Img
 
 class BSDS(data.Dataset):
@@ -308,7 +309,7 @@ class BSDS68(data.Dataset):
         
         return ndata
     
-class BSDS_imblur(data.Dataset):
+class BSDS_deblur(data.Dataset):
     
     def __init__(self,kernel,stdn,random_seed=20180102,filepath='',train=True,\
                  color=False,shape=(256,256),padType='valid',batchSize = 40,\
@@ -336,6 +337,10 @@ class BSDS_imblur(data.Dataset):
         self.rnd_seed = random_seed
         self.batchSize = batchSize
         
+        crop = None
+        if self.padType == "valid":
+            crop = getPad2RetainShape(kernel.shape)
+        
         fshape = (3,2,0,1)
               
         if self.train:
@@ -356,6 +361,8 @@ class BSDS_imblur(data.Dataset):
                 self.train_gt = th.from_numpy(self.train_gt[mask,...]).type_as(kernel)                
                 
             self.train_data = self.generate_BlurredNoisyData()
+            if crop is not None:
+                self.train_gt = crop2D(self.train_gt,crop)
         else:
             if os.path.isfile(filepath):
                 f = np.load(filepath)
@@ -373,6 +380,8 @@ class BSDS_imblur(data.Dataset):
                 self.test_gt = th.from_numpy(self.test_gt[mask,...]).type_as(kernel)
             
             self.test_data = self.generate_BlurredNoisyData()
+            if crop is not None:
+                self.test_gt = crop2D(self.test_gt,crop)
         
     def __getitem__(self, index):
         """

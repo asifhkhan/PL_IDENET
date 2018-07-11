@@ -2149,12 +2149,18 @@ def power_iteration(x0,A,numiter=20):
     
     return A(x0).mul(x0).sum()/x0.norm(p=2).pow(2)
 
-def getSubArrays(start,end,numSubArrays,length):
+def getSubArrays(start,end,numSubArrays,length,dformat=lambda x:np.array(x)):
     r""" We want to split the array A=[start:end] in numSubArrays arrays of 
     equal  length so that all the elements in A are included in at least one of 
     the created sub-arrays.
     
-    Returns the starting (s) and ending points (e) of each sub-array."""
+    Returns the starting (s) and ending points (e) of each sub-array.
+    
+    The last argument 'dformat' is a lambda expression which can be defined to
+    specify the type of the structure that will hold the data (default :
+        lambda x:np.array(x))
+    
+    """
     
     assert(numSubArrays*length >= end), "The combination of the selected "\
     +"number of sub-arrays and length cannot cover completely all the elements "\
@@ -2166,7 +2172,7 @@ def getSubArrays(start,end,numSubArrays,length):
     
     mask = {}
     for i in range(numSubArrays):
-        mask['m'+str(i+1)] = list(range(s[i],e[i]))
+        mask[i] = dformat(range(s[i],e[i]))
     
     
     return mask

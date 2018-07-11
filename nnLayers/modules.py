@@ -10,7 +10,7 @@ Created on Wed Mar 28 23:49:14 2018
 import torch as th
 from torch import nn
 from pydl.nnLayers import cascades
-from pydl.nnLayers.functional.functional import imLoss, Pad2D, Crop2D, \
+from pydl.nnLayers.functional.functional import imLoss, mseLoss, Pad2D, Crop2D, \
 WienerFilter, WeightNormalization, WeightNormalization5D, EdgeTaper
 from pydl.nnLayers import init
 from pydl.utils import formatInput2Tuple, getPad2RetainShape
@@ -516,6 +516,24 @@ class NConv_transpose2D(nn.Module):
             + ', zeroMeanWeights = ' + str(self.zeroMeanWeights) + ')'
 
 
+class MSELoss(nn.Module):
+    def __init__(self,grad=False):
+        
+        super(MSELoss,self).__init__()
+        
+        self.grad = grad
+        self.mode = "validation"
+    
+    def forward(self,input,target):
+        
+        return mseLoss.apply(input,target,self.grad,self.mode)
+
+    def __repr__(self):
+        return self.__class__.__name__ + '(' \
+        + 'gradMSE = ' + str(self.grad)\
+        + ', mode = ' + self.mode + ')'        
+   
+    
 class PSNRLoss(nn.Module):
     
     def __init__(self,peakval=255):

@@ -678,7 +678,7 @@ class SVL2Proj(th.autograd.Function):
                         
         return grad_input,grad_alpha,None
 
-class MSELoss(th.autograd.Function):
+class mseLoss(th.autograd.Function):
     @staticmethod
     def forward(ctx,input,target,grad=False,mode="normal"):
         r"""Y = MSELOSS(X, Xgt) computes the loss incurred by the estimated

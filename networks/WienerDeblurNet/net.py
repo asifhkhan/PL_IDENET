@@ -21,9 +21,9 @@ class WienerDeblurNet(nn.Module):
                  wiener_kernel_size = (5,5),\
                  wiener_output_features = 24,\
                  numWienerFilters = 4,\
-                 sharedWienerFilters = True,\
-                 sharedChannels = False,\
-                 sharedAlphaChannels = True,\
+                 wienerWeightSharing = True,\
+                 wienerChannelSharing = False,\
+                 alphaChannelSharing = True,\
                  lb = 1e-3,\
                  ub = 1e-1,\
                  wiener_pad = True,\
@@ -69,17 +69,17 @@ class WienerDeblurNet(nn.Module):
         self.wiener_pad = wiener_pad
         self.wiener_padType = wiener_padType
         self.edgetaper = edgeTaper
-        self.sharedWienerFilters = sharedWienerFilters
+        self.wienerWeightSharing = wienerWeightSharing
         self.wiener_normalizedWeights = wiener_normalizedWeights
         self.wiener_zeroMeanWeights = wiener_zeroMeanWeights
         
         assert(numWienerFilters > 1),"More than one Wiener filter is expected."
         
-        wchannels = 1 if sharedChannels else input_channels
+        wchannels = 1 if wienerChannelSharing else input_channels
         
         wiener_kernel_size = formatInput2Tuple(wiener_kernel_size,int,2)
         
-        if sharedWienerFilters:
+        if self.WienerWeightSharing:
             shape = (wiener_output_features,wchannels)+wiener_kernel_size
         else:
             shape = (numWienerFilters,wiener_output_features,wchannels)+wiener_kernel_size       
@@ -88,7 +88,7 @@ class WienerDeblurNet(nn.Module):
         init.dctMultiWiener(self.wiener_conv_weights)
         
         if wiener_scale and wiener_normalizedWeights:
-            if sharedWienerFilters:
+            if self.wienerWeightSharing:
                 self.wiener_scale = nn.Parameter(th.Tensor(wiener_output_features).fill_(0.1))
             else:
                 self.wiener_scale = nn.Parameter(th.Tensor(numWienerFilters,wiener_output_features).fill_(0.1))
@@ -98,7 +98,7 @@ class WienerDeblurNet(nn.Module):
         assert(lb > 0 and ub > 0),"Lower (lb) and upper (ub) bounds of the "\
         +"beta parameter must be positive numbers."
         alpha = th.linspace(lb,ub,numWienerFilters).unsqueeze(-1).log()
-        if sharedAlphaChannels:            
+        if alphaChannelSharing:            
             shape = (numWienerFilters,1)
         else:
             alpha = alpha.repeat(1,input_channels)
@@ -188,7 +188,7 @@ class WienerDeblurNet(nn.Module):
         if self.edgetaper:
             input = EdgeTaper.apply(input,blurKernel)
         
-        if self.sharedWienerFilters:
+        if self.wienerWeightSharing:
             wiener_conv_weights = WeightNormalization.apply(self.wiener_conv_weights,\
                 self.wiener_scale,self.wiener_normalizedWeights,self.wiener_zeroMeanWeights)
         else:
@@ -240,6 +240,7 @@ class WienerDeblurNet(nn.Module):
             + ', wiener_kernel_size = ' + str(tuple(self.wiener_conv_weights.shape[-2:])) \
             + ', wiener_output_features = ' + str(self.wiener_conv_weights.size(-4)) \
             + ', WienerFilters = ' + str(self.weights.size(1)) \
+            + ', WienerWeightSharing = ' + str(self.WienerWeightSharing)\
             + ', edgeTaper = ' + str(self.edgetaper)\
             + ', ResDNet_depth = ' + str(self.rpa_depth) \
             + ', convWeightSharing = ' + str(self.convWeightSharing)\

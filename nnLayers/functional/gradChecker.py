@@ -649,7 +649,7 @@ def imloss(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False,loss='psnr',peakVal
 
 def MSELoss(epsilon=1e-4,dtype='torch.DoubleTensor',GPU=False,peakVal=255,grad=False):
     
-    MSELossF = functional.MSELoss.apply
+    MSELossF = functional.mseLoss.apply
     
     x = th.randn(4,3,40,40).abs().type(dtype)
     x = x.div(x.max())*peakVal
@@ -738,7 +738,7 @@ def cost_imloss(x,y,loss,peakVal):
     return out
 
 def cost_MSELoss(x,y,grad,mode="normal"):
-    F = functional.MSELoss.apply
+    F = functional.mseLoss.apply
     out = F(x,y,grad,mode)
     return out
 
