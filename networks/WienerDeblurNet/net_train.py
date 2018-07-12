@@ -136,7 +136,7 @@ parser.add_argument('--cuda', action='store_true', help='use cuda?')
 parser.add_argument('--gpu_device', type = int, default = 0, help='which gpu to use?')
 parser.add_argument('--threads', type = int, default = 4, help='number of threads for data loader to use.')
 parser.add_argument('--seed', type = int, default = 123, help='random seed to use. Default=123.')
-parser.add_argument('--stdn', type = tupleOfFloats, default='(2.5,4.,5.5,7.,8.5,10)', help=" Number of noise levels (standard deviation) for which the network will be trained.")
+parser.add_argument('--stdn', type = tupleOfFloats, default='(2.5,4.,5.5,7.,8.5,10.)', help=" Number of noise levels (standard deviation) for which the network will be trained.")
 parser.add_argument('--saveFreq', type = int, default = 10, help='Every how many epochs we save the model parameters.')
 parser.add_argument('--saveBest', action='store_true', help='save the best model parameters?')
 parser.add_argument('--xid', type = str, default = '', help='Identifier for the current experiment')
@@ -144,13 +144,13 @@ parser.add_argument('--resume', action='store_true', help='resume training?')
 parser.add_argument('--initModelPath', type = str, default = '', help='Initialize the model paramaters from a saved state.')
 # DataSet Parameters
 parser.add_argument('--imdbPath', type = str, default = '', help='location of the dataset.')
-parser.add_argument('--psfPath', type = str, default = '', help='location of the psfs.')
-parser.add_argument('--psfIdx', type = tupleOfInts, default = '(1,2,3,4,5)', help='Which kernels to use.')
-parser.add_argument('--numTrainImagesperPsf', type = int, default = 50, help='How many images to use for training with a particular psf?')
-parser.add_argument('--numTestImagesperPsf', type = int, default = 50, help='How many images to use for testing with a particular psf?')
+parser.add_argument('--psfTrainPath', type = str, default = '', help='location of the psfs used for training.')
+parser.add_argument('--psfTestPath', type = str, default = '', help='location of the psfs used for testing.')
+parser.add_argument('--numTrainImagesperPSF', type = int, default = 50, help='How many images to use for training with a particular psf?')
+parser.add_argument('--numTestImagesperPSF', type = int, default = 50, help='How many images to use for testing with a particular psf?')
 parser.add_argument('--data_seed', type = int, default = 20180102, help='random seed for data generation. Default=20180102')
 # Optimizer Parameters
-parser.add_argument('--amsgrad', action='store_true', help='Use the fix to Adam?')
+parser.add_argument('--amsgrad', action='store_true', help='Use the fix for Adam?')
 
 opt = parser.parse_args()
 
@@ -158,6 +158,27 @@ print('========= Selected training parameters and model architecture ===========
 print(opt)
 print('===========================================================================')
 print('\n')
+
+
+# from argparse import Namespace
+# opt = Namespace(color=True,wiener_kernel_size=(5,5),wiener_output_features=24,\
+# numWienerFilters=3,wienerWeightSharing=True,wienerChannelSharing=True,\
+# alphaChannelSharing=True,lb=1e-4,ub=1e-2,wiener_pad=True,wiener_padType='symmetric',\
+# edgeTaper=True,wiener_scale=True,wiener_normalizedWeights=True,wiener_zeroMeanWeights=True,\
+# kernel_size=(5,5),num_filters=32,convWeightSharing=True,pad='same',padType='symmetric',\
+# conv_init='dct',bias_f=True,bias_t=True,scale_f=True,scale_t=False,normalizedWeights=True,\
+# zeroMeanWeights=True,alpha_proj=True,rpa_depth=3,rpa_kernel_size1=(3,3),rpa_kernel_size2=(3,3),\
+# rpa_output_features=64,rpa_init='msra',rpa_bias1=True,rpa_bias2=True,rpa_prelu1_mc=True,\
+# rpa_prelu2_mc=True,prelu_init=0.1,rpa_scale1=True,rpa_scale2=True,rpa_normalizedWeights=True,\
+# rpa_zeroMeanWeights=True,shortcut=(True,False,False),clb=0,cub=255,msegrad=True,batchSize=10,\
+# testBatchSize=6,nEpochs=10,lr=1e-2,lr_gamma=0.1,lr_milestones=100,cuda=False,gpu_device=0,\
+# threads=4,seed=123,stdn=(2.5,4,5.5),saveFreq=5,saveBest=True,xid='',resume=True,\
+# initModelPath='',imdbPath='/home/stamatis/Documents/Work/repos/datasets/imdb_256x256_color.npz',\
+# psfTrainPath='/home/stamatis/Documents/Work/repos/datasets/MotionBlurKernels/trainKernels20.pt',\
+# psfTestPath='/home/stamatis/Documents/Work/repos/datasets/MotionBlurKernels/testKernels.pt',\
+# numTrainImagesperPSF=4,numTestImagesperPSF=3,data_seed=20180102,amsgrad=True)
+
+
 
 if isinstance(opt.lr_milestones,tuple): 
     opt.lr_milestones = list(opt.lr_milestones)
@@ -188,15 +209,15 @@ if opt.xid == '':
 else:
     opt.xid = 'WDNet_'+opt.xid
 
-dirname = "{}_{}_wkernel:{}x{}_wfilters:{}_width:{}{}{}_depth:{}_kernel:{}x{}_filters:{}_rpa1:{}x{}_features:{}_rpa2:{}x{}{}_train".format(opt.xid,\
+dirname = "{}_{}_wkernel:{}x{}_wfilters:{}_width:{}{}{}_kernel:{}x{}_filters:{}_depth:{}_rpa1:{}x{}_features:{}_rpa2:{}x{}{}_train".format(opt.xid,\
                strc,opt.wiener_kernel_size[0],opt.wiener_kernel_size[1],opt.wiener_output_features,
-               opt.numWienerFilters,str_wws,str_wcs,opt.rpa_depth,opt.kernel_size[0],opt.kernel_size[1],\
-               opt.num_filters,opt.rpa_kernel_size1[0],opt.rpa_kernel_size1[1],\
+               opt.numWienerFilters,str_wws,str_wcs,opt.kernel_size[0],opt.kernel_size[1],\
+               opt.num_filters,opt.rpa_depth,opt.rpa_kernel_size1[0],opt.rpa_kernel_size1[1],\
                opt.rpa_output_features,opt.rpa_kernel_size2[0],opt.rpa_kernel_size2[1],\
                str_cws)
 
-currentPath = os.path.dirname(os.path.realpath(__file__))
-#currentPath = os.path.dirname(os.path.realpath('pydl/networks/UDNet/net_joint_train.py'))
+#currentPath = os.path.dirname(os.path.realpath(__file__))
+currentPath = os.path.dirname(os.path.realpath('pydl/networks/WienerDeblurNet/net_train.py'))
 dirPath = os.path.join(currentPath,'Results',dirname)
 os.makedirs(dirPath,exist_ok = True)
 
@@ -219,25 +240,25 @@ if opt.cuda:
     th.cuda.manual_seed(opt.seed)
 
 print('===> Loading datasets')
-D = th.load(opt.psfPath)
-K = {}
-for k,j in enumerate(opt.psfIdx,0):
-    K[k] = D['k'+str(j)]
-del D    
+
+# Load the training and testing kernels
+Ktrain = th.load(opt.psfTrainPath)
+Ktest = th.load(opt.psfTestPath)
 
 Ntrain, Ntest  = 400, 100
 
 assert(opt.numTrainImagesperPSF <= Ntrain and opt.numTestImagesperPSF <= Ntest),\
  "Invalid values for one or both of numTrainImagesperPSF and numTestImagesperPSF."
-train_mask = getSubArrays(0,Ntrain,len(K),length=opt.numTrainImagesperPSF,dformat=lambda x:ndarray(x))
-test_mask = getSubArrays(0,Ntest,len(K),length=opt.numTestImagesperPSF,dformat=lambda x:ndarray(x))  
+train_mask = getSubArrays(0,Ntrain,len(Ktrain),length=opt.numTrainImagesperPSF,dformat=lambda x:ndarray(x))
+test_mask = getSubArrays(0,Ntest,len(Ktest),length=opt.numTestImagesperPSF,dformat=lambda x:ndarray(x))  
 NS = len(opt.stdn)
 train_data_loader = {}
 test_data_loader = {}
-for k in range(len(K)):
-    train_set = BSDS_deblur(K[k],opt.stdn,random_seed=opt.data_seed,filepath=opt.imdbPath,train=True,color=opt.color,shape=(256,256),batchSize=50,mask=train_mask[k])
+for k in range(len(Ktrain)):
+    train_set = BSDS_deblur(Ktrain[k],opt.stdn,random_seed=opt.data_seed,filepath=opt.imdbPath,train=True,color=opt.color,shape=(256,256),batchSize=50,mask=train_mask[k])
     train_data_loader[k] = DataLoader(dataset = train_set, num_workers=opt.threads, batch_size=opt.batchSize, shuffle=True)
-    test_set = BSDS_deblur(K[k],opt.stdn,random_seed=opt.data_seed,filepath=opt.imdbPath,train=False,color=opt.color,shape=(256,256),batchSize=50,mask=test_mask[k])
+for k in range(len(Ktest)):
+    test_set = BSDS_deblur(Ktest[k],opt.stdn,random_seed=opt.data_seed,filepath=opt.imdbPath,train=False,color=opt.color,shape=(256,256),batchSize=50,mask=test_mask[k])
     test_data_loader[k] = DataLoader(dataset=test_set, num_workers=opt.threads, batch_size=opt.testBatchSize, shuffle=False)
     
 print('===> Building model')
@@ -273,7 +294,7 @@ if opt.initModelPath != '':
     opt.resume = False
 
 #criterion = nn.MSELoss(size_average=True,reduce=True)
-criterion = MSELoss(grad=opt.grad)
+criterion = MSELoss(grad=opt.msegrad)
 
 if opt.cuda :
     model = model.cuda()
@@ -317,8 +338,6 @@ if opt.resume :
         if start == 0 : start = state['epoch'] 
 
 scheduler = MultiStepLR(optimizer,opt.lr_milestones,gamma=opt.lr_gamma)
-
-
 
 def train(epoch):
     scheduler.step()

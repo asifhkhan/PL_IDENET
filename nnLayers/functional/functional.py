@@ -737,7 +737,7 @@ class mseLoss(th.autograd.Function):
             batch = err.size(0)
             normE = err.view(batch,-1).norm(p=2,dim=1)
             M = target.view(batch,-1).max(dim=1)[0]
-            loss = -20*th.log10(M*math.sqrt(N)/normE)
+            loss = 20*th.log10(M*math.sqrt(N)/normE)
             loss = loss.mean()
         
         return loss   

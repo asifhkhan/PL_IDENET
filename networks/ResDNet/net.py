@@ -97,9 +97,8 @@ class ResDNet(nn.Module):
                 self.register_parameter('scale_t', None)           
         
         
-        numparams_prelu1 = rpa_output_features if rpa_prelu1_mc else 1
-        numparams_prelu2 = output_features if rpa_prelu2_mc else 1
-        
+        numparams_prelu1 = output_features if rpa_prelu1_mc else 1
+        numparams_prelu2 = rpa_output_features if rpa_prelu2_mc else 1
         
         self.rpa_depth = rpa_depth
         self.shortcut = formatInput2Tuple(shortcut,bool,rpa_depth,strict = False)

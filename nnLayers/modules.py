@@ -14,6 +14,7 @@ from pydl.nnLayers.functional.functional import imLoss, mseLoss, Pad2D, Crop2D, 
 WienerFilter, WeightNormalization, WeightNormalization5D, EdgeTaper
 from pydl.nnLayers import init
 from pydl.utils import formatInput2Tuple, getPad2RetainShape
+from math import log10
 #from collections import OrderedDict
 
 #from functools import reduce
@@ -28,8 +29,8 @@ class WienerDeconvLayer(nn.Module):
                  sharedWienerFilters = False,\
                  sharedChannels = True,\
                  sharedAlphaChannels = True,\
-                 lb = 1e-3,\
-                 ub = 1e-1,\
+                 lb = 1e-4,\
+                 ub = 1e-2,\
                  pad = True,\
                  padType = 'symmetric',\
                  edgeTaper = True,\
@@ -71,7 +72,7 @@ class WienerDeconvLayer(nn.Module):
                 
         assert(lb > 0 and ub > 0),"Lower (lb) and upper (ub) bounds of the "\
         +"alpha parameter must be positive numbers."
-        alpha = th.linspace(lb,ub,numWienerFilters).unsqueeze(-1).log()
+        alpha = th.logspace(log10(lb),log10(ub),numWienerFilters).unsqueeze(-1).log()
         if sharedAlphaChannels:            
             shape = (numWienerFilters,1)
         else:

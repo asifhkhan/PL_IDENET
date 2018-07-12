@@ -14,6 +14,7 @@ from pydl.nnLayers.cascades import nconv2D, nconv_transpose2D
 from pydl.nnLayers.functional.functional import L2Proj, Pad2D, Crop2D,\
 WeightNormalization, WeightNormalization5D, EdgeTaper, WienerFilter
 from pydl.utils import formatInput2Tuple, getPad2RetainShape
+from math import log10
 
 class WienerDeblurNet(nn.Module):
     
@@ -33,7 +34,7 @@ class WienerDeblurNet(nn.Module):
                  wiener_normalizedWeights = True,\
                  wiener_zeroMeanWeights = True,\
                  kernel_size = (5,5),\
-                 output_features = 24,\
+                 output_features = 32,\
                  convWeightSharing = True,\
                  pad = 'same',\
                  padType = 'symmetric',\
@@ -79,7 +80,7 @@ class WienerDeblurNet(nn.Module):
         
         wiener_kernel_size = formatInput2Tuple(wiener_kernel_size,int,2)
         
-        if self.WienerWeightSharing:
+        if self.wienerWeightSharing:
             shape = (wiener_output_features,wchannels)+wiener_kernel_size
         else:
             shape = (numWienerFilters,wiener_output_features,wchannels)+wiener_kernel_size       
@@ -97,7 +98,7 @@ class WienerDeblurNet(nn.Module):
                 
         assert(lb > 0 and ub > 0),"Lower (lb) and upper (ub) bounds of the "\
         +"beta parameter must be positive numbers."
-        alpha = th.linspace(lb,ub,numWienerFilters).unsqueeze(-1).log()
+        alpha = th.logspace(log10(lb),log10(ub),numWienerFilters).unsqueeze(-1).log()
         if alphaChannelSharing:            
             shape = (numWienerFilters,1)
         else:
@@ -154,8 +155,8 @@ class WienerDeblurNet(nn.Module):
             else:
                 self.register_parameter('scale_t', None)           
         
-        numparams_prelu1 = rpa_output_features if rpa_prelu1_mc else 1
-        numparams_prelu2 = output_features if rpa_prelu2_mc else 1
+        numparams_prelu1 = output_features if rpa_prelu1_mc else 1
+        numparams_prelu2 = rpa_output_features if rpa_prelu2_mc else 1
         
         self.rpa_depth = rpa_depth
         self.shortcut = formatInput2Tuple(shortcut,bool,rpa_depth,strict = False)
@@ -207,11 +208,12 @@ class WienerDeblurNet(nn.Module):
         cstdn = cstdn.view(-1) # size: batch*numWienerFilters
         # input has size batch*numWienerFilters x C x H x W
         input = input.view(batch*numWienerFilters,*input.shape[2:])        
-        
+                
         output = nconv2D(input,self.conv_weights,bias=self.bias_f,stride=1,\
                      pad=self.pad,padType=self.padType,dilation=1,\
                      scale=self.scale_f,normalizedWeights=self.normalizedWeights,
                      zeroMeanWeights=self.zeroMeanWeights)
+        
         for m in self.resPA:
             output = m(output)
         
@@ -230,7 +232,7 @@ class WienerDeblurNet(nn.Module):
         output = Crop2D.apply(self.bbproj(input-output),padding)
         
         # size of batch x numWienerFilters x C x H x W
-        output = output.view(batch,numWienerFilters,output.shape[1:])
+        output = output.view(batch,numWienerFilters,*output.shape[1:])
         
         return output.mul(self.weights).sum(dim=1)
 
@@ -239,8 +241,8 @@ class WienerDeblurNet(nn.Module):
             + 'input_channels = ' + str(self.conv_weights.size(-3)) \
             + ', wiener_kernel_size = ' + str(tuple(self.wiener_conv_weights.shape[-2:])) \
             + ', wiener_output_features = ' + str(self.wiener_conv_weights.size(-4)) \
-            + ', WienerFilters = ' + str(self.weights.size(1)) \
-            + ', WienerWeightSharing = ' + str(self.WienerWeightSharing)\
+            + ', wienerWidth = ' + str(self.weights.size(1)) \
+            + ', wienerWeightSharing = ' + str(self.wienerWeightSharing)\
             + ', edgeTaper = ' + str(self.edgetaper)\
             + ', ResDNet_depth = ' + str(self.rpa_depth) \
             + ', convWeightSharing = ' + str(self.convWeightSharing)\
