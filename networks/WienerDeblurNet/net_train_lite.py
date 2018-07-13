@@ -213,8 +213,8 @@ if opt.imdbPath == "":
     Ntrain, Ntest  = 400, 100
 else:
     f = npload(opt.imdbPath)
-    Ntrain = f['train_set'].size(-1)
-    Ntest = f['test_set'].size(-1)
+    Ntrain = f['train_set'].shape[-1]
+    Ntest = f['test_set'].shape[-1]
     del f
 
 assert(opt.numTrainImagesperPSF <= Ntrain and opt.numTestImagesperPSF <= Ntest),\
