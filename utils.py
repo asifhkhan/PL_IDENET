@@ -2186,7 +2186,7 @@ def psf2otf(psf,otfSize):
     assert(psf.size(0) <= otfSize[-2] and psf.size(1) <= otfSize[-1]),"The "\
     +"spatial support of the otf must be equal or larger to that of the psf."
     
-    otf = th.zeros(otfSize,dtype = psf.dtype)
+    otf = th.zeros(otfSize).type_as(psf)
     otf[...,0:psf.size(0),0:psf.size(1)] = psf
     
     s = tuple(int(i) for i in -(np.asarray(psf.shape[0:])//2))
@@ -2211,7 +2211,7 @@ def edgetaper(input,psf):
     
     if psf.size(0) != 1:
         psfProj = psf.sum(dim=1)
-        z = th.zeros(input.size(-2)-1,dtype=psf.dtype)
+        z = th.zeros(input.size(-2)-1).type_as(psf)
         z[0:psf.size(0)] = psfProj
         z = th.rfft(z,1,onesided=True)
         z = th.irfft(cmul(z,conj(z)),1,onesided=True,signal_sizes=(input.size(-2)-1,))
@@ -2220,7 +2220,7 @@ def edgetaper(input,psf):
     
     if psf.size(1) != 1:
         psfProj = psf.sum(dim=0)
-        z = th.zeros(input.size(-1)-1,dtype=psf.dtype)
+        z = th.zeros(input.size(-1)-1).type_as(psf)
         z[0:psf.size(1)] = psfProj
         z = th.rfft(z,1,onesided=True)
         z = th.irfft(cmul(z,conj(z)),1,onesided=True,signal_sizes=(input.size(-1)-1,))
