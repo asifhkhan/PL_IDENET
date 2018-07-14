@@ -186,8 +186,6 @@ class WienerDeblurNet(nn.Module):
         self.weights = nn.Parameter(th.Tensor(1,numWienerFilters,1,1,1).fill_(1/numWienerFilters))
         
     def forward(self,input,blurKernel,stdn):
-        import pdb
-        pdb.set_trace()
         
         if self.wiener_pad:
             padding = getPad2RetainShape(blurKernel.shape)
