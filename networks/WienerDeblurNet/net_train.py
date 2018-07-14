@@ -85,6 +85,7 @@ parser.add_argument('--numWienerFilters', type = int, default = 4, help="Number 
 parser.add_argument('--wienerWeightSharing', action='store_true', help="use shared weights for the Wiener debluring layers?")
 parser.add_argument('--wienerChannelSharing', action='store_true', help="use shared weights for the different image channels in the Wiener debluring layers?")
 parser.add_argument('--alphaChannelSharing', action='store_true',help="use shared alpha weights for the different image channels in the Wiener debluring layers?")
+parser.add_argument('--alpha_update', action='store_true',help="Learn the alpha weights for the Wiener debluring layers?")
 parser.add_argument('--lb', type = float, default = 1e-5, help="The minimum value of the alpha parameter.")
 parser.add_argument('--ub', type = float, default = 1e-2, help="The maximum value of the alpha parameter.")
 parser.add_argument('--wiener_pad', action='store_true', help="Pad the input image before debluring?")
@@ -268,10 +269,10 @@ params = OrderedDict(input_channels=input_channels,wiener_kernel_size=opt.wiener
          wiener_output_features=opt.wiener_output_features,numWienerFilters=opt.numWienerFilters,\
          wienerWeightSharing=opt.wienerWeightSharing,wienerChannelSharing=\
          opt.wienerChannelSharing,alphaChannelSharing=opt.alphaChannelSharing,\
-         lb=opt.lb,ub=opt.ub,wiener_pad=opt.wiener_pad,wiener_padType=\
-         opt.wiener_padType,edgeTaper=opt.edgeTaper,wiener_scale=opt.wiener_scale,\
-         wiener_normalizedWeights=opt.wiener_normalizedWeights,wiener_zeroMeanWeights\
-         =opt.wiener_zeroMeanWeights,kernel_size=opt.kernel_size,\
+         alpha_update=opt.alpha_update,lb=opt.lb,ub=opt.ub,wiener_pad=opt.wiener_pad,\
+         wiener_padType=opt.wiener_padType,edgeTaper=opt.edgeTaper,\
+         wiener_scale=opt.wiener_scale,wiener_normalizedWeights=opt.wiener_normalizedWeights,\
+         wiener_zeroMeanWeights=opt.wiener_zeroMeanWeights,kernel_size=opt.kernel_size,\
          output_features=output_features,convWeightSharing=opt.convWeightSharing,\
          pad=opt.pad,padType=opt.padType,conv_init=opt.conv_init,bias_f = \
          opt.bias_f,bias_t = opt.bias_t,scale_f=opt.scale_f,scale_t=opt.scale_t,\

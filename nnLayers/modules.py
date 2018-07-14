@@ -29,6 +29,7 @@ class WienerDeconvLayer(nn.Module):
                  sharedWienerFilters = False,\
                  sharedChannels = True,\
                  sharedAlphaChannels = True,\
+                 alpha_update = True,\
                  lb = 1e-4,\
                  ub = 1e-2,\
                  pad = True,\
@@ -78,9 +79,12 @@ class WienerDeconvLayer(nn.Module):
         else:
             alpha = alpha.repeat(1,input_channels)
             shape = (numWienerFilters,input_channels)
-            
-        self.alpha = nn.Parameter(th.Tensor(th.Size(shape)))
-        self.alpha.data.copy_(alpha)
+        
+        if alpha_update:       
+            self.alpha = nn.Parameter(th.Tensor(th.Size(shape)))
+            self.alpha.data.copy_(alpha)
+        else:
+            self.alpha = alpha
     
     def forward(self,input,blurKernel,stdn):
         
@@ -101,7 +105,7 @@ class WienerDeconvLayer(nn.Module):
                     
         output, cstdn = WienerFilter.apply(input,blurKernel,conv_weights,self.alpha)
         
-        # compute the variance of the remaining colored noise in the output
+        # compute the standard deviation of the remaining colored noise in the output
         cstdn = th.sqrt(stdn.type_as(cstdn).unsqueeze(-1).pow(2).mul(cstdn.mean(dim=2)))
         
         if self.pad:

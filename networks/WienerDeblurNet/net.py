@@ -25,6 +25,7 @@ class WienerDeblurNet(nn.Module):
                  wienerWeightSharing = True,\
                  wienerChannelSharing = False,\
                  alphaChannelSharing = True,\
+                 alpha_update = True,\
                  lb = 1e-3,\
                  ub = 1e-1,\
                  wiener_pad = True,\
@@ -73,6 +74,7 @@ class WienerDeblurNet(nn.Module):
         self.wienerWeightSharing = wienerWeightSharing
         self.wiener_normalizedWeights = wiener_normalizedWeights
         self.wiener_zeroMeanWeights = wiener_zeroMeanWeights
+        self.alpha_update = alpha_update
         
         assert(numWienerFilters > 1),"More than one Wiener filter is expected."
         
@@ -104,9 +106,12 @@ class WienerDeblurNet(nn.Module):
         else:
             alpha = alpha.repeat(1,input_channels)
             shape = (numWienerFilters,input_channels)
-            
-        self.alpha = nn.Parameter(th.Tensor(th.Size(shape)))
-        self.alpha.data.copy_(alpha)
+        
+        if self.alpha_update:
+            self.alpha = nn.Parameter(th.Tensor(th.Size(shape)))
+            self.alpha.data.copy_(alpha)
+        else:
+            self.alpha = alpha
        
         # Initialize the Residual Denoising Network       
         kernel_size = formatInput2Tuple(kernel_size,int,2)
@@ -181,6 +186,8 @@ class WienerDeblurNet(nn.Module):
         self.weights = nn.Parameter(th.Tensor(1,numWienerFilters,1,1,1).fill_(1/numWienerFilters))
         
     def forward(self,input,blurKernel,stdn):
+        import pdb
+        pdb.set_trace()
         
         if self.wiener_pad:
             padding = getPad2RetainShape(blurKernel.shape)
@@ -196,6 +203,8 @@ class WienerDeblurNet(nn.Module):
             wiener_conv_weights = WeightNormalization5D.apply(self.wiener_conv_weights,\
                 self.wiener_scale,self.wiener_normalizedWeights,self.wiener_zeroMeanWeights)
         
+        if not self.alpha_update:
+            self.alpha = self.alpha.type_as(wiener_conv_weights)
         input, cstdn = WienerFilter.apply(input,blurKernel,wiener_conv_weights,\
                                            self.alpha)
         

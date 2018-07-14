@@ -86,6 +86,7 @@ parser.add_argument('--numWienerFilters', type = int, default = 4, help="Number 
 parser.add_argument('--wienerWeightSharing', action='store_true', help="use shared weights for the Wiener debluring layers?")
 parser.add_argument('--wienerChannelSharing', action='store_true', help="use shared weights for the different image channels in the Wiener debluring layers?")
 parser.add_argument('--alphaChannelSharing', action='store_true',help="use shared alpha weights for the different image channels in the Wiener debluring layers?")
+parser.add_argument('--alpha_update', action='store_true',help="Learn the alpha weights for the Wiener debluring layers?")
 parser.add_argument('--lb', type = float, default = 1e-5, help="The minimum value of the alpha parameter.")
 parser.add_argument('--ub', type = float, default = 1e-2, help="The maximum value of the alpha parameter.")
 parser.add_argument('--wiener_padType', type = str, default = 'symmetric', help="What padding to use?")
@@ -155,14 +156,6 @@ opt.kernel_size = formatInput2Tuple(opt.kernel_size,int,2)
 opt.rpa_kernel_size1 = formatInput2Tuple(opt.rpa_kernel_size1,int,2)
 opt.rpa_kernel_size2 = formatInput2Tuple(opt.rpa_kernel_size2,int,2)
 
-if isinstance(opt.stdn,tuple) :
-    if len(opt.stdn) == 1:
-        stdn = str(opt.stdn[0])
-    else:
-        stdn = "("+str(opt.stdn[0])+"->"+str(opt.stdn[-1])+")"
-else:
-    stdn = str(opt.stdn)
-    
 if opt.xid == '':
     opt.xid = 'WDNet'
 else:
@@ -221,7 +214,6 @@ assert(opt.numTrainImagesperPSF <= Ntrain and opt.numTestImagesperPSF <= Ntest),
  "Invalid values for one or both of numTrainImagesperPSF and numTestImagesperPSF."
 train_mask = getSubArrays(0,Ntrain,len(Ktrain),length=opt.numTrainImagesperPSF,dformat=lambda x:ndarray(x))
 test_mask = getSubArrays(0,Ntest,len(Ktest),length=opt.numTestImagesperPSF,dformat=lambda x:ndarray(x))  
-NS = len(opt.stdn)
 train_data_loader = {}
 test_data_loader = {}
 for k in range(len(Ktrain)):
@@ -238,9 +230,10 @@ params = OrderedDict(input_channels=input_channels,wiener_kernel_size=opt.wiener
          wiener_output_features=opt.wiener_output_features,numWienerFilters=opt.numWienerFilters,\
          wienerWeightSharing=opt.wienerWeightSharing,wienerChannelSharing=\
          opt.wienerChannelSharing,alphaChannelSharing=opt.alphaChannelSharing,\
-         lb=opt.lb,ub=opt.ub,wiener_pad=True,wiener_padType=opt.wiener_padType,\
-         edgeTaper=opt.edgeTaper,wiener_scale=True,wiener_normalizedWeights=True,\
-         wiener_zeroMeanWeights=True,kernel_size=opt.kernel_size,output_features=output_features,\
+         alpha_update=opt.alpha_update,lb=opt.lb,ub=opt.ub,wiener_pad=True,\
+         wiener_padType=opt.wiener_padType,edgeTaper=opt.edgeTaper,wiener_scale=True,\
+         wiener_normalizedWeights=True,wiener_zeroMeanWeights=True,\
+         kernel_size=opt.kernel_size,output_features=output_features,\
          convWeightSharing=True,pad='same',padType='symmetric',conv_init=opt.conv_init,\
          bias_f=True,bias_t=True,scale_f=True,scale_t=False,\
          normalizedWeights=True,zeroMeanWeights=True,alpha_proj=True,\
