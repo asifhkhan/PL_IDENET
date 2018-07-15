@@ -411,6 +411,7 @@ class BSDS_deblur(data.Dataset):
         else:
             return len(self.test_data)
     
+    
     def generate_BlurredNoisyData(self):
         r"""Create blurred+noisy observations using the ground-truth data."""
         if self.train:
@@ -432,20 +433,60 @@ class BSDS_deblur(data.Dataset):
         batches = input.size(0)//self.batchSize # number of batches
         if input.size(0)%self.batchSize != 0:
             batches = batches + 1
-        
-        for i in range(len(self.stdn)):
+
+        # Compute the blurred input images        
+        for j in range(0,batches):
+            idx1 = (j+1)*self.batchSize
+            if idx1 > shape[0]:
+                idx1 = shape[0]
+            ndata[j*self.batchSize:idx1,...]=imfilter2D_SpatialDomain(\
+                 input[j*self.batchSize:idx1,...],self.kernel,padType=self.padType,mode="conv")
+            
+        # Add noise to the blurred data
+        for i in range(1,len(self.stdn)):
             noise = self.stdn[i]*th.randn(*shape,dtype=dtype)
-            for j in range(0,batches):
-                idx1 = shape[0]*i+(j+1)*self.batchSize
-                if idx1 > shape[0]*(i+1):
-                    idx1 = shape[0]*(i+1)
-                
-                idx2 = (j+1)*self.batchSize
-                if idx2 > input.size(0):
-                    idx2 = input.size(0)
-                ndata[shape[0]*i+j*self.batchSize:idx1,...] = \
-                    imfilter2D_SpatialDomain(input[j*self.batchSize:idx2,...],\
-                        self.kernel,padType=self.padType,mode="conv")\
-                                             +noise[j*self.batchSize:idx2,...]
+            ndata[i*shape[0]:(i+1)*shape[0],...] = ndata[0:shape[0],...] + noise
         
-        return ndata
+        noise = self.stdn[0]*th.randn(*shape,dtype=dtype)
+        ndata[0:shape[0],...] += noise
+        
+        return ndata    
+    
+#    def generate_BlurredNoisyData(self):
+#        r"""Create blurred+noisy observations using the ground-truth data."""
+#        if self.train:
+#            input = self.train_gt
+#        else:
+#            input = self.test_gt
+#            
+#        shape = tuple(input.shape)
+#        if self.padType == 'valid':
+#            bshape = (1,1)+tuple(self.kernel.shape[-2:])
+#            shape = tuple(shape[i]-bshape[i]+1 for i in range(0,len(shape)))
+#        dtype = input.dtype
+#                        
+#        ndata_shape = (shape[0]*len(self.stdn),)+shape[1:]
+#        ndata = th.empty(ndata_shape,dtype=dtype)
+#        
+#        th.manual_seed(self.rnd_seed)
+#        
+#        batches = input.size(0)//self.batchSize # number of batches
+#        if input.size(0)%self.batchSize != 0:
+#            batches = batches + 1
+#        
+#        for i in range(len(self.stdn)):
+#            noise = self.stdn[i]*th.randn(*shape,dtype=dtype)
+#            for j in range(0,batches):
+#                idx1 = shape[0]*i+(j+1)*self.batchSize
+#                if idx1 > shape[0]*(i+1):
+#                    idx1 = shape[0]*(i+1)
+#                
+#                idx2 = (j+1)*self.batchSize
+#                if idx2 > input.size(0):
+#                    idx2 = input.size(0)
+#                ndata[shape[0]*i+j*self.batchSize:idx1,...] = \
+#                    imfilter2D_SpatialDomain(input[j*self.batchSize:idx2,...],\
+#                        self.kernel,padType=self.padType,mode="conv")\
+#                                             +noise[j*self.batchSize:idx2,...]
+#        
+#        return ndata
