@@ -60,6 +60,6 @@ explicit methods, respectively).
 | Model          | Task                 | Test_dataset | PSNR  | SSIM   | model_weights | 
 |----------------|----------------------|--------------|-------|--------| --------- |
 | PL_IDENet_Setting1    | Isotropic        | Set5/Set14/BSDS100/Urban100/Manga109     | 37.22/33.10/31.77/30.66/37.30 | 0.9524/0.9056/0.8850/0.9062/0.9710 | [link](https://drive.google.com/open?id=1HqcTHEKmjoR6JcGXjaK-XJcU996Hv7xF&usp=drive_fsg)      
-| PL_IDENet_Setting1    | Isotropic        | Set5/Set14/BSDS100/Urban100/Manga109     | 31.92/28.34/27.40/25.57/30.14 | 0.8860/0.7665/0.7206/0.7594/0.8996 | [link]([https://drive.google.com/file/d/1u0VcESEduHu-GBCC6vDGQt9qXSX2AKdn/view?usp=sharing](https://drive.google.com/open?id=1HqcTHEKmjoR6JcGXjaK-XJcU996Hv7xF&usp=drive_fs))      
-| PL_IDENet_Setting2    | Anisotropic       | DIV2KRK     | 32.98 | 0.9081 | [link]([https://drive.google.com/file/d/1YXggWIsi-auCjmPQDvW9FjB1f9fZK0hN/view?usp=sharing](https://drive.google.com/open?id=1HqcTHEKmjoR6JcGXjaK-XJcU996Hv7xF&usp=drive_fs))         
-| PL_IDENet_Setting2 | Anisotropic    | DIV2KRK     | 28.82 | 0.7886 | [link]([https://drive.google.com/file/d/1kMCxoD-WEWaLcADJ7ZKV5B7jPpiYBkC2/view?usp=sharing](https://drive.google.com/open?id=1HqcTHEKmjoR6JcGXjaK-XJcU996Hv7xF&usp=drive_fs))        
+| PL_IDENet_Setting1    | Isotropic        | Set5/Set14/BSDS100/Urban100/Manga109     | 31.92/28.34/27.40/25.57/30.14 | 0.8860/0.7665/0.7206/0.7594/0.8996 | [link](https://drive.google.com/open?id=1HqcTHEKmjoR6JcGXjaK-XJcU996Hv7xF&usp=drive_fs))      
+| PL_IDENet_Setting2    | Anisotropic       | DIV2KRK     | 32.98 | 0.9081 | [link](https://drive.google.com/open?id=1HqcTHEKmjoR6JcGXjaK-XJcU996Hv7xF&usp=drive_fs))         
+| PL_IDENet_Setting2 | Anisotropic    | DIV2KRK     | 28.82 | 0.7886 | [link](https://drive.google.com/open?id=1HqcTHEKmjoR6JcGXjaK-XJcU996Hv7xF&usp=drive_fs))        
