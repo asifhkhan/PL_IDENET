@@ -73,7 +73,7 @@ We achieve state-of-the-art performance on various image restoration tasks. Deta
 <summary>Evaluation on Setting1 (click to expand)</summary>
 
 <p align="center">
-  <img width="500" src="assets/iso_results.png">
+  <img width="800" src="assets/iso_results.png">
 </p>
 </details>
 
