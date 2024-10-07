@@ -29,5 +29,5 @@ maintaining a substantially lower number of parameters/FLOPs
 explicit methods, respectively).
 >
 > <p align="center">
-    <img src="assets/pipeline.png" style="border-radius: 15px">
+    <img src="asset/pipeline.png" style="border-radius: 15px">
 </p>
