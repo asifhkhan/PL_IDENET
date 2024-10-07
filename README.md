@@ -46,6 +46,10 @@ explicit methods, respectively).
 - [Citation](#cite)
 
 ## <a name="Real-SR"></a>🔍 Visual Results On Setting1 (Isotropic Guassian Kernels) 
-[<img src="assets/imgsli1.png" height="250"/>](https://imgsli.com/MjQ4MzQz) [<img src="assets/imgsli2.png" height="250"/>](https://imgsli.com/MjQ4MzQ2) [<img src="assets/imgsli3.png" height="250"/>](https://imgsli.com/MjQ4MzQ3)
-
-[<img src="assets/imgsli4.png" height="250"/>](https://imgsli.com/MjQ4MzQ5) [<img src="assets/imgsli5.png" height="250"/>](https://imgsli.com/MjQ4MzUx) [<img src="assets/imgsli6.png" height="250"/>](https://imgsli.com/MjQ4MzUz)
+<p align="center">
+  <img width="800" src="assets/iso.png">
+</p>
+## <a name="Real-SR"></a>🔍 Visual Results On Setting2 (AnIsotropic Guassian Kernels) 
+<p align="center">
+  <img width="800" src="assets/aniso.png">
+</p>
