@@ -27,3 +27,7 @@ blind-SR method, respectively. These results are achieved while
 maintaining a substantially lower number of parameters/FLOPs
 (i.e., 25% and 68% fewer parameters than best implicit and
 explicit methods, respectively).
+>
+> <p align="center">
+    <img src="assets/pipeline.png" style="border-radius: 15px">
+</p>
