@@ -1,0 +1,27 @@
+name: PL_IDENet_setting2
+suffix: ~  # add suffix to saved images
+model: blind_asif
+distortion: sr
+scale: 4 # 2
+crop_border: ~  # crop border when evaluation. If None(~), crop the scale pixels
+gpu_ids: [0,1]
+pca_matrix_path: ./pca_aniso_matrix_x4.pth
+
+datasets:
+  test0:
+    name: DIV2KRK
+    mode: LQGT
+#    dataroot_GT: ./aniso/DIV2KRK_x4/x4HRblur.lmdb
+#    dataroot_LQ: ./aniso/DIV2KRK_x4/x4LRblur.lmdb
+    dataroot_GT: ./ansio/DIV2KRK_x2/x4HR.lmdb
+    dataroot_LQ: ./aniso/DIV2KRK_x4/x4LR.lmdb
+
+#### network structures
+network_G:
+  which_model_G: DEblurSRResDNet
+  setting:
+    scale: 4
+
+#### path
+path:
+  pretrain_model_G: ./checkpoint/1760_G_best_psnr.pth

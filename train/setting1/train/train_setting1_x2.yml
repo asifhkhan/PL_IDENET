@@ -1,0 +1,13 @@
+scale: 2
+
+pca_matrix_path: /home/asif/Documents/kernel_est/experiment5/idenet/pca_matrix/pca_matrix.pth
+
+degradation:
+  random_kernel: True
+  ksize: 21
+  code_length: 10
+  sig_min: 0.2
+  sig_max: 2.0
+  rate_iso: 1.0
+  random_disturb: false
+
