@@ -70,18 +70,18 @@ We achieve state-of-the-art performance on various image restoration tasks. Deta
 
 
 <details>
-<summary>Evaluation on Classic SR (click to expand)</summary>
+<summary>Evaluation on Setting1 (click to expand)</summary>
 
 <p align="center">
-  <img width="500" src="assets/classicSR.png">
+  <img width="500" src="assets/iso_results.png">
 </p>
 </details>
 
 
 
 <details>
-<summary>Evaluation on Lightweight SR (click to expand)</summary>
+<summary>Evaluation on Seting2 (click to expand)</summary>
 
 <p align="center">
-  <img width="500" src="assets/lightSR.png">
+  <img width="500" src="assets/aniso_results.png">
 </p>
