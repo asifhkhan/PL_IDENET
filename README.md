@@ -134,7 +134,7 @@ cd train
 python train.py
 ```
 
-## <a name="training"></a>  :hourglass: Evaluation
+## <a name="testing"></a>  :hourglass: Testing
 
 We use Set5, Set14, BSDS100, Urban100 and Manga109 for Setting 1.
 Use the following script to generate the LR Blur images and convert them into binary.
