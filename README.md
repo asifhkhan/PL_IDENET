@@ -91,6 +91,8 @@ We achieve state-of-the-art performance on various image restoration tasks. Deta
   <img width="800" src="assets/iso_results.png">
 </p>
 
+</details>
+
 <details>
 <summary>Evaluation on Seting2 (click to expand)</summary>
 
