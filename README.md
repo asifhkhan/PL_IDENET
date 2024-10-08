@@ -52,7 +52,7 @@ explicit methods, respectively).
 
 - [Visual Results](#visual_results)
 - [Model Summary](#model_summary)
-- [Quantitative Results](# quantitative results)
+- [Quantitative Results](#quantitative results)
 - [Installation](#installation)
 - [Training](#training)
 - [Testing](#testing)
@@ -77,7 +77,7 @@ explicit methods, respectively).
 | x2_PL_IDENet_Setting2    | Anisotropic       | DIV2KRK     | 32.98 | 0.9081 | [link](https://drive.google.com/open?id=1HqcTHEKmjoR6JcGXjaK-XJcU996Hv7xF&usp=drive_fs)      
 | x4_PL_IDENet_Setting2 | Anisotropic    | DIV2KRK     | 28.82 | 0.7886 | [link](https://drive.google.com/open?id=1HqcTHEKmjoR6JcGXjaK-XJcU996Hv7xF&usp=drive_fs)   
 
-## <a name="results"></a> 🥇 Quantitative Results
+## <a name="quantitative_results"></a> 🥇 Quantitative Results
 
 We achieve state-of-the-art performance on various image restoration tasks. Detailed results can be found in the paper.
 
