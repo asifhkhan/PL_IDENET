@@ -105,3 +105,5 @@ The datasets used in our training and testing are orgnized as follows:
 | Setting2                          | [DIV2K](https://data.vision.ee.ethz.ch/cvl/DIV2K/) (800 training images) +  [Flickr2K](https://cv.snu.ac.kr/research/EDSR/Flickr2K.tar) (2650 images)[download](https://drive.google.com/file/d/1jPgG_URDQZ4kyXaMMXJ8AZ8jEErCdKuM/view?usp=share_link)] | DIV2KRK  [[download](https://github.com/sefibk/KernelGAN)] | [Google Drive](https://drive.google.com/drive/folders/19ZbLJfeIvkYeA2PAWT1mGei5SDgGkIMt?usp=sharing) |
 
 ## <a name="training"></a>  :hourglass: Training
+
+We use DIV2K and Flickr2K as our training datasets (totally 3450 images).
