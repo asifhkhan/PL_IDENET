@@ -108,15 +108,32 @@ The datasets used in our training and testing are orgnized as follows:
 
 We use DIV2K and Flickr2K as our training datasets (total 3450 images).
 ### For Setting 1
-Change the path in the train.py file 
+Change the yaml file path in the train.py file 
 ```
 cd train
 python train.py
 ```
 ### For Setting 2
-Change the path in the train.py file 
+Change the yaml file path in the train.py file 
 ```
 cd train
 python train.py
+```
+
+## <a name="training"></a>  :hourglass: Evaluation
+
+We use Set5, Set14, BSDS100, Urban100 and Manga109 for Setting 1.
+use the following script to generate the LR Blur images and convert them into binary
+
+Change the yaml file path in the test.py file 
+```
+cd test
+python test.py
+```
+We use DIV2kRK for Setting 2
+Change the yaml file path in the test.py file 
+```
+cd test
+python test.py
 ```
 
