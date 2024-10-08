@@ -87,7 +87,7 @@ We achieve state-of-the-art performance on various image restoration tasks. Deta
 </p>
 
 
-## <a name="installation"></a> :wrench: Installation
+##<a name="installation"></a> :wrench: Installation
 
 Create a conda environment with the following simple commands:
 ```
