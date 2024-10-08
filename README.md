@@ -1,5 +1,5 @@
 ## [TIP24] Lightweight Prompt Learning Implicit Degradation Estimation Network for Blind Super Resolution
-![](https://img.shields.io/badge/pytorch-PL-IDENet-brightgreen)
+![](https://img.shields.io/badge/pytorch-PL_IDENet-brightgreen)
 
 ---
 ### [[Paper](https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=10639339)]
