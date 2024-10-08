@@ -81,7 +81,7 @@ explicit methods, respectively).
 
 ## <a name="quantitative_results"></a> 🥇 Quantitative Results
 
-We achieve state-of-the-art performance on various image restoration tasks. Detailed results can be found in the paper.
+We achieve state-of-the-art performance. Detailed results can be found in the paper.
 
 
 <details>
