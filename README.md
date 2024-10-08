@@ -123,7 +123,7 @@ python train.py
 ## <a name="training"></a>  :hourglass: Evaluation
 
 We use Set5, Set14, BSDS100, Urban100 and Manga109 for Setting 1.
-use the following script to generate the LR Blur images and convert them into binary.
+Use the following script to generate the LR Blur images and convert them into binary.
 
 ```
 cd scripts
@@ -139,6 +139,12 @@ cd test
 python test.py
 ```
 We use DIV2kRK for Setting 2
+Use the following script to convert them into binary
+```
+cd scripts
+python create_lmdb.py
+```
+
 Change the yaml file path in the test.py file 
 ```
 cd test
