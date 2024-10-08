@@ -139,7 +139,7 @@ cd test
 python test.py
 ```
 We use DIV2kRK for Setting 2
-Use the following script to convert them into binary
+.Use the following script to convert them into binary
 ```
 cd scripts
 python create_lmdb.py
