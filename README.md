@@ -64,7 +64,8 @@ explicit methods, respectively).
   <img width="800" src="assets/iso.png">
 </p>
 
-## <a name="Real-SR"></a>🔍 Visual Results On Setting2 (AnIsotropic Guassian Kernels) 
+## <a name="visual_results">🔍 Visual Results
+### On Setting1 (Anisotropic Gaussian Kernels) 
 <p align="center">
   <img width="800" src="assets/aniso.png">
 </p>
