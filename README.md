@@ -52,7 +52,7 @@ explicit methods, respectively).
 
 - [Visual Results](#visual_results)
 - [Model Summary](#model_summary)
-- [Quantitative Results](#quantitative results)
+- [Quantitative Results](#quantitative_results)
 - [Installation](#installation)
 - [Training](#training)
 - [Testing](#testing)
