@@ -13,9 +13,6 @@
 
 
 
-[<img src="assets/imgsli4.png" height="250"/>](https://imgsli.com/MjQ4MzQ5) [<img src="assets/imgsli5.png" height="250"/>](https://imgsli.com/MjQ4MzUx) [<img src="assets/imgsli6.png" height="250"/>](https://imgsli.com/MjQ4MzUz)
-
-
 
 > **Abstract:**  Blind image super-resolution (SR) aims to recover
 a high-resolution (HR) image from its low-resolution (LR) counterpart under the assumption of unknown degradations. Many
