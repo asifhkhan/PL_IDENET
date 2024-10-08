@@ -106,4 +106,17 @@ The datasets used in our training and testing are orgnized as follows:
 
 ## <a name="training"></a>  :hourglass: Training
 
-We use DIV2K and Flickr2K as our training datasets (totally 3450 images).
+We use DIV2K and Flickr2K as our training datasets (total 3450 images).
+# For Setting 1
+Change the path in the train.py file 
+```
+cd train
+python train.py
+```
+# For Setting 2
+Change the path in the train.py file 
+```
+cd train
+python train.py
+```
+
