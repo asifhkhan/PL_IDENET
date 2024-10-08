@@ -164,7 +164,8 @@ Change the yaml file path in the test.py file
 cd test
 python test.py
 ```
-## <a name="cite"></a> 🥰 Citation
+## <a name="cite"></a> 📝 Citation
+
 
 Please cite us if our work is useful for your research.
 
