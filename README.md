@@ -150,4 +150,16 @@ Change the yaml file path in the test.py file
 cd test
 python test.py
 ```
+## <a name="cite"></a> 🥰 Citation
 
+Please cite us if our work is useful for your research.
+
+```
+@article{khan2024lightweight,
+  title={Lightweight Prompt Learning Implicit Degradation Estimation Network for Blind Super Resolution},
+  author={Khan, Asif Hussain and Micheloni, Christian and Martinel, Niki},
+  journal={IEEE Transactions on Image Processing},
+  year={2024},
+  publisher={IEEE}
+}
+```
