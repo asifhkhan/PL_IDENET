@@ -59,7 +59,7 @@ explicit methods, respectively).
 - [Citation](#cite)
 
 ## <a name="visual_results">🔍 Visual Results
-# On Setting1 (Isotropic Gaussian Kernels) 
+### On Setting1 (Isotropic Gaussian Kernels) 
 <p align="center">
   <img width="800" src="assets/iso.png">
 </p>
