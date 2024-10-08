@@ -58,7 +58,8 @@ explicit methods, respectively).
 - [Testing](#testing)
 - [Citation](#cite)
 
-## <a name="Real-SR"></a>🔍 Visual Results On Setting1 (Isotropic Guassian Kernels) 
+## <a name="visual_results">🔍 Visual Results
+## On Setting1 (Isotropic Gaussian Kernels) 
 <p align="center">
   <img width="800" src="assets/iso.png">
 </p>
