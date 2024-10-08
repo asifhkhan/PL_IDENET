@@ -8,7 +8,7 @@
 ✨ _**Visual examples**_:
 
 
-[<img src="assets/imgsli1.png" height="150" width="150"/>](https://imgsli.com/MzA0MTYw)[<img src="assets/Imgsli2.png" height="250" width="320"/>](https://imgsli.com/MzA0MTc0)[<img src="assets/Imgsli3.png" height="250" width="320"/>](https://imgsli.com/MzA0MTg2)
+[<img src="assets/imgsli1.png" height="150" width="150"/>](https://imgsli.com/MzA0MTYw)[<img src="assets/Imgsli2.png" height="150" width="120"/>](https://imgsli.com/MzA0MTc0)[<img src="assets/Imgsli3.png" height="250" width="320"/>](https://imgsli.com/MzA0MTg2)
 
 
 
