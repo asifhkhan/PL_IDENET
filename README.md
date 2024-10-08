@@ -72,7 +72,7 @@ explicit methods, respectively).
 
 ## <a name="model_summary"></a> :page_with_curl: Model Summary
 
-| Model          | Task                 | Test_dataset | PSNR  | SSIM   | model_weights | 
+| Model          | Task                 | Test_dataset | PSNR  | SSIM   | pretrained_weights | 
 |----------------|----------------------|--------------|-------|--------| --------- |
 | x2_PL_IDENet_Setting1    | Isotropic        | Set5/Set14/BSDS100/Urban100/Manga109     | 37.22/33.10/31.77/30.66/37.30 | 0.9524/0.9056/0.8850/0.9062/0.9710 | [link](https://drive.google.com/open?id=1HqcTHEKmjoR6JcGXjaK-XJcU996Hv7xF&usp=drive_fsg)      
 | x4_PL_IDENet_Setting1    | Isotropic        | Set5/Set14/BSDS100/Urban100/Manga109     | 31.92/28.34/27.40/25.57/30.14 | 0.8860/0.7665/0.7206/0.7594/0.8996 | [link](https://drive.google.com/open?id=1HqcTHEKmjoR6JcGXjaK-XJcU996Hv7xF&usp=drive_fs)     
