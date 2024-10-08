@@ -85,7 +85,7 @@ We achieve state-of-the-art performance on various image restoration tasks. Deta
 <p align="center">
   <img width="500" src="assets/aniso_results.png">
 </p>
-<Installation> 
+## <a name="installation"></a> :wrench: Installation
 
 Create conda environment with the following simple commands:
 ```
