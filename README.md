@@ -5,7 +5,7 @@
 ### [[Paper](https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=10639339)]
 [Asif Hussain Khan](https://scholar.google.com/citations?user=L74TJA4AAAAJ&hl=it)\, [Christian Micheloni](https://scholar.google.com/citations?user=Gbnq0F8AAAAJ&hl=it)\, [Niki Martinel](https://scholar.google.com/citations?user=tSbe868AAAAJ&hl=it)
 
-#✨ _**Visual examples**_:
+✨ _**Visual examples**_:
 
 
 [<img src="assets/imgsli1.png" height="250" width="350"/>](https://imgsli.com/MzA0MTYw)[<img src="assets/Imgsli2.png" height="250" width="320"/>](https://imgsli.com/MzA0MTc0)[<img src="assets/Imgsli3.png" height="250" width="320"/>](https://imgsli.com/MzA0MTg2)
