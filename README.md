@@ -65,7 +65,7 @@ explicit methods, respectively).
 </p>
 
 
-### On Setting1 (Anisotropic Gaussian Kernels) 
+### On Setting2 (Anisotropic Gaussian Kernels) 
 <p align="center">
   <img width="800" src="assets/aniso.png">
 </p>
