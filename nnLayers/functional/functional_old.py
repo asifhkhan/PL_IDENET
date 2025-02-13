@@ -1158,17 +1158,17 @@ class WienerFilter(th.autograd.Function):
         while input.dim() < 4:
             input = input.unsqueeze(0)
 
-        batch = input.size(0) #1
-        channels = input.size(1) #3
+        batch = input.size(0)
+        channels = input.size(1)
 
         assert(blurKernel.dim() < 5),"The blurring kernel must be at most a 4D tensor."
         while blurKernel.dim() < 4:
             blurKernel = blurKernel.unsqueeze(0)
     
-        bshape = tuple(blurKernel.shape) #1, 1, 21, 21
+        bshape = tuple(blurKernel.shape)
         assert(bshape[0] in (1,batch) and bshape[1] in (1,channels)),"Invalid blurring kernel dimensions."
         
-        N = alpha.size(0) # Number of employed Wiener filters :4.
+        N = alpha.size(0) # Number of employed Wiener filters.
         assert(alpha.dim() == 2 and alpha.size(-1) in (1,channels)),\
         "Invalid dimensions for the alpha parameter. The expected shape of the "\
         +"tensor is {} x [{}|{}]".format(N,1,channels)
@@ -1178,45 +1178,36 @@ class WienerFilter(th.autograd.Function):
         +"kernel must be a 4D or 5D tensor."    
 
         if weights.dim() < 5:
-            weights = weights.unsqueeze(0) #1, 24, 1, 5, 5
+            weights = weights.unsqueeze(0)    
     
-        wshape = tuple(weights.shape)#1, 24, 1, 5, 5
+        wshape = tuple(weights.shape)
         assert(wshape[0] in (1,N) and wshape[2] in (1,channels)),\
         "Invalid regularization kernel dimensions."
         
         # Zero-padding of the blur kernel to match the input size
-        B = th.zeros(bshape[0],bshape[1],input.size(2),input.size(3)).type_as(blurKernel) #1, 1, 148, 148
+        B = th.zeros(bshape[0],bshape[1],input.size(2),input.size(3)).type_as(blurKernel)
         B[...,0:bshape[2],0:bshape[3]] = blurKernel
         del blurKernel
         
         # Circular shift of the zero-padded blur kernel
-        bs = tuple(int(i) for i in -(np.asarray(bshape[-2:])//2)) #-10, -10
+        bs = tuple(int(i) for i in -(np.asarray(bshape[-2:])//2))
         bs = (0,0) + bs
-        B = utils.shift(B,bs,bc='circular') #1, 1, 148, 148
+        B = utils.shift(B,bs,bc='circular')
         
         # FFT of B
-        B = th.fft.rfft2(B) #1, 1, 148, 75
-        B = th.view_as_real(B) #1, 1, 148, 75, 2
-
+        B = th.rfft(B,2) # tensor of size batch x channels x height x width x 2
         # Zero-padding of the spatial dimensions of the weights to match the input size    
-        G = th.zeros(wshape[0],wshape[1],wshape[2],input.size(2),input.size(3)).type_as(weights) #1, 24, 1, 148, 148
+        G = th.zeros(wshape[0],wshape[1],wshape[2],input.size(2),input.size(3)).type_as(weights)
         G[...,0:wshape[3],0:wshape[4]] = weights
         del weights
 
         # circular shift of the zero-padded weights
-        ws = tuple(int(i) for i in -(np.asarray(wshape[-2:])//2)) #-2, -2
+        ws = tuple(int(i) for i in -(np.asarray(wshape[-2:])//2))
         ws = (0,0,0) + ws
-        G = utils.shift(G,ws,bc='circular') #1, 24, 1, 148, 148
+        G = utils.shift(G,ws,bc='circular')
         # FFT of G
-
-        G = th.fft.rfft2(G) #1, 24, 1, 148, 75
-        G = th.view_as_real(G) #1, 24, 1, 148, 75, 2 ==> N x D x channels x height x width x 2
-
-
-        Y = th.fft.rfft2(input) #1, 3, 148, 75
-        Y = th.view_as_real(Y) #1, 3, 148, 75, 2
-        Y = cmul(conj(B), Y).unsqueeze(1) #1, 1, 3, 148, 75, 2==>batch x 1 x channels x height x width x 2
-
+        G = th.rfft(G,2) # N x D x channels x height x width x 2
+        Y = cmul(conj(B),th.rfft(input,2)).unsqueeze(1) # batch x 1 x channels x height x width x 2
         
         ctx.intermediate_results = tuple()
         if ctx.needs_input_grad[2] or ctx.needs_input_grad[3]:
@@ -1224,28 +1215,26 @@ class WienerFilter(th.autograd.Function):
         elif ctx.needs_input_grad[0]:
             ctx.intermediate_results += (alpha,B,G)
         
-        B = cabs(B).unsqueeze(-1) #1,,1,148,75,1 # batch x channels x height x width x 1
-        G = cabs(G).pow(2).sum(dim=1) #1,1,148,75 # N x channels x height x width
-        G = G.mul(alpha.unsqueeze(-1).unsqueeze(-1)).unsqueeze(0).unsqueeze(-1) #1, 4, 1, 148, 75, 1# 1 x N x channels x height x width x 1
+        B = cabs(B).unsqueeze(-1) # batch x channels x height x width x 1
+        G = cabs(G).pow(2).sum(dim=1) # N x channels x height x width
+        G = G.mul(alpha.unsqueeze(-1).unsqueeze(-1)).unsqueeze(0).unsqueeze(-1) # 1 x N x channels x height x width x 1
         #b1= B.pow(2).unsqueeze(1)
-        G = G + B.pow(2).unsqueeze(1) #1, 4, 1, 148, 75, 1 # batch x N x channels x height x width x 1
-        S = (B.unsqueeze(1).div(G)).pow(2).squeeze(-1) #1, 4, 1, 148, 75
+        G = G + B.pow(2).unsqueeze(1) # batch x N x channels x height x width x 1
+        S = (B.unsqueeze(1).div(G)).pow(2).squeeze(-1)
         # Sinc S is one-sided Fourier Transform we need to compute the sum of 
         # the Fourier coefficients taking into account the symmetry.
-        c = 2*S.sum(dim=-1).sum(dim=-1)-S[...,0].sum(dim=-1) #1, 4, 1
+        c = 2*S.sum(dim=-1).sum(dim=-1)-S[...,0].sum(dim=-1)
         if not input.size(-1)%2:
             c -= S[...,-1].sum(dim=-1)
-        c = c/(input.size(-1)*input.size(-2)) #1, 4, 1
-
-
-
-        Y_div_G = Y.div(G) #1, 4, 3, 148, 75, 2
-        Y_div_G = th.view_as_complex(Y_div_G)  #1, 4, 3, 148, 75
-        inverse_fft = th.fft.irfft2(Y_div_G) #1, 4, 3, 148, 148
-
-        return inverse_fft, c
-
-
+        c = c/(input.size(-1)*input.size(-2))
+        return th.irfft(Y.div(G),2,signal_sizes = input.shape[-2:]), c
+        # output 1: batch x N x channels x height x width
+        # output 2: batch x N x channels 
+        
+        # Note: If sigma (of size batch) is the noise std of the input image, 
+        # then the noise std of the output images will be equal to 
+        # th.sqrt(sigma.unsqueeze(-1).pow(2).mul(c.mean(dim=2)))
+    
     @staticmethod
     def backward(ctx,grad_output,grad_c = None):                
         from pydl.cOps import cmul, cabs, conj
@@ -1260,36 +1249,18 @@ class WienerFilter(th.autograd.Function):
         
         if ctx.needs_input_grad[0] or ctx.needs_input_grad[2] or ctx.needs_input_grad[3] :
             D = cabs(B).pow(2).unsqueeze(1) # batch x 1 x channels x height x width 
-            T = cabs(G).pow(2).sum(dim=1).unsqueeze(0) # 1 x N x channels x height x width
-
-
+            T = cabs(G).pow(2).sum(dim=1).unsqueeze(0) # 1 x N x channels x height x width 
             T = T.mul(alpha.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)) # batch x N x channels x height x width             
             D = D + T # batch x N x channels x height x width 
             del T
             D = D.unsqueeze(-1) # batch x N x channels x height x width x 1
             
         if ctx.needs_input_grad[0] or ctx.needs_input_grad[2]:
-            Z = th.fft.rfft2(grad_output)
-            Z = th.view_as_real(Z)
-            # Z = th.fft.fft(th.fft.fft( grad_output, dim=-2), dim=-1)
-            # Z = th.view_as_real(Z) #1, 4, 3, 128, 128, 2 ==>  batch x N x channels x height x width x 2
-            # print(Z.shape)
-            # Z = th.rfft(grad_output,2) # batch x N x channels x height x width x 2 ==> 1,2,3,148,75,2
-            # print('Z', Z.shape)
-            # Z = th.torch.view_as_real(th.fft.fft(grad_output, dim=2))
-
+            Z = th.rfft(grad_output,2) # batch x N x channels x height x width x 2
                     
         if ctx.needs_input_grad[0]:
-
-            grad_input = cmul(B.unsqueeze(1),Z)
-            grad_input = grad_input.div(D)
-            grad_input = th.view_as_complex(grad_input)
-            grad_input = th.fft.irfft2(grad_input)
-            # grad_input = th.fft.ifft(th.fft.ifft(grad_input, dim=-2), dim=-1).real
-            # print('grad_input_1', grad_input.shape )
-            # grad_input = th.irfft(cmul(B.unsqueeze(1),Z).div(D),2,signal_sizes=grad_output.shape[-2:]) ##1,4,3,148,148
-            # print('grad_input_1', grad_input.shape)
-            # print('grad_input_old',grad_input.shape)
+            grad_input = th.irfft(cmul(B.unsqueeze(1),Z).div(D),2,\
+                                  signal_sizes=grad_output.shape[-2:])
             grad_input = grad_input.sum(dim=1)
         
         if 'B' in locals(): del B        
@@ -1299,12 +1270,7 @@ class WienerFilter(th.autograd.Function):
             U = cmul(conj(Z),Y.div(D.pow(2))) # batch x N x channels x height x width x 2
             U = U[...,0].unsqueeze(-1).unsqueeze(2) # batch x N x D x channels x height x width x 1
             U = U.mul(G.unsqueeze(0)) # batch x N x D x channels x height x width x 2
-            U = th.view_as_complex(U)
-            U = th.fft.irfft2(U)
-            # U = th.fft.ifft(th.fft.ifft(U, dim=-2), dim=-1).real # 1, 4, 24, 3,128, 128 ==> batch x N x D x channels x height x width
-            # print('U',U.shape)
-            # U = th.irfft(U,2,signal_sizes=grad_output.shape[-2:]) # batch x N x D x channels x height x width ==> 1,2,24,3,148,148
-            # print('U', U.shape)
+            U = th.irfft(U,2,signal_sizes=grad_output.shape[-2:]) # batch x N x D x channels x height x width            
             U = utils.shift_transpose(U,ws,bc='circular')
             U = U[...,0:wshape[3],0:wshape[4]] # batch x N x D x channels x height x width
             grad_weights = -2*U.mul(alpha.unsqueeze(0).unsqueeze(2).unsqueeze(-1).unsqueeze(-1))
@@ -1318,14 +1284,8 @@ class WienerFilter(th.autograd.Function):
         if 'Z' in locals(): del Z
         if ctx.needs_input_grad[3]:
             Y = Y.mul(cabs(G).pow(2).sum(dim=1).unsqueeze(0).unsqueeze(-1)) # batch x 1 x channels x height x width x 2
-            # print('Y_new', Y.shape)
             Y = Y.div(D.pow(2))
-            Y = th.view_as_complex(Y)
-            Y = th.fft.irfft2(Y)
-            # Y = th.fft.ifft(th.fft.ifft(Y, dim=-2), dim=-1).real
-            # print('Y', Y.shape)
-            # Y = th.irfft(Y,2,signal_sizes=grad_output.shape[-2:]) # batch x 1 x channels x height x width ==> 1,2,3,148,148
-            # print('Y', Y.shape)
+            Y = th.irfft(Y,2,signal_sizes=grad_output.shape[-2:]) # batch x 1 x channels x height x width 
             Y = Y.mul(-alpha.unsqueeze(0).unsqueeze(-1).unsqueeze(-1))
             Y = Y.mul(grad_output)
             grad_alpha = Y.sum(dim=4).sum(dim=3).sum(dim=0)
@@ -1353,13 +1313,8 @@ class EdgeTaper(th.autograd.Function):
             psfProj = psf.sum(dim=1)
             z = th.zeros(input.size(-2)-1).type_as(psf)
             z[0:psf.size(0)] = psfProj
-            z = th.fft.rfft(z, dim=-1)
-            z = th.view_as_real(z) ##74, 2
-            z = cmul(z,conj(z))
-            z = th.view_as_complex(z)
-            # z = th.rfft(z,1,onesided=True) ##[74,2]
-            z = th.fft.irfft(z, input.size(-2)-1)
-            # z = th.irfft(cmul(z,conj(z)),1,onesided=True,signal_sizes=(input.size(-2)-1,)) ##147
+            z = th.rfft(z,1,onesided=True)
+            z = th.irfft(cmul(z,conj(z)),1,onesided=True,signal_sizes=(input.size(-2)-1,))
             z = th.cat((z,z[0:1]),dim=0).div(z.max())
             beta['dim0'] = z.unsqueeze(-1)
         
@@ -1367,13 +1322,8 @@ class EdgeTaper(th.autograd.Function):
             psfProj = psf.sum(dim=0)
             z = th.zeros(input.size(-1)-1).type_as(psf)
             z[0:psf.size(1)] = psfProj
-            z = th.fft.rfft(z, dim=-1)
-            z = th.view_as_real(z)  ##74, 2
-            z = cmul(z, conj(z))
-            z = th.view_as_complex(z)
-            z = th.fft.irfft(z, input.size(-1) - 1)
-            # z = th.rfft(z,1,onesided=True) ##[74,2]
-            # z = th.irfft(cmul(z,conj(z)),1,onesided=True,signal_sizes=(input.size(-1)-1,)) #[147]
+            z = th.rfft(z,1,onesided=True)
+            z = th.irfft(cmul(z,conj(z)),1,onesided=True,signal_sizes=(input.size(-1)-1,))
             z = th.cat((z,z[0:1]),dim=0).div(z.max())
             beta['dim1'] = z.unsqueeze(0)
     
@@ -1385,60 +1335,31 @@ class EdgeTaper(th.autograd.Function):
         while alpha.dim() < input.dim():
             alpha = alpha.unsqueeze(0)
                 
-        otf = utils.psf2otf(psf,input.shape) ##1,3,148,75,2
-
-        blurred_input = th.fft.rfft2(input)
-        blurred_input = th.view_as_real(blurred_input)
-        blurred_input = cmul(blurred_input, otf)
-        blurred_input = th.view_as_complex(blurred_input)
-        blurred_input = th.fft.irfft2(blurred_input)
-        # blurred_input = th.irfft(cmul(th.rfft(input,2),otf),2,signal_sizes = input.shape[-2:]) ##1,3,148,148
+        otf = utils.psf2otf(psf,input.shape)
         
-        output = alpha*input + (1-alpha)*blurred_input ##==> 1,3,148,148
+        blurred_input = th.irfft(cmul(th.rfft(input,2),otf),2,\
+                                 signal_sizes = input.shape[-2:])
+        
+        output = alpha*input + (1-alpha)*blurred_input
                         
         if ctx.needs_input_grad[0]:
-            # print('ctx',ctx.needs_input_grad[0])
             # mask = ((output >= input.min())+(output <= input.max())).eq(2)
-            # mask = th.__and__(output >= input.min(),output <= input.max())
-            mask = (output >= input.min()) & (output <= input.max())
-            # ctx.save_for_backward(alpha, otf, mask)
+            mask = th.__and__(output >= input.min(),output <= input.max())
             ctx.intermediate_results = alpha,otf,mask
-            # print('alpa, otf, mask', alpha.shape, otf.shape, mask.shape)
         
         return output.clamp(input.min(),input.max())
-
+    
     @staticmethod
-
     def backward(ctx,grad_output):
         from pydl.cOps import cmul,conj
-        # print('grad_output', grad_output.shape)
-
+        
         alpha,otf,mask = ctx.intermediate_results
-        # alpha, otf, mask = ctx.saved_tensors
+
+        print('alpha : otf : mask ', alpha.shape, otf.shape, mask.shape)
+        
         grad_input = mask.type_as(grad_output)*grad_output
 
-        # print('grad_input_backward', grad_input.shape)
-
-
-
-        # grad_input = alpha*grad_input + th.irfft(cmul(th.rfft((1-alpha)*grad_input,2),conj(otf)),2,signal_sizes =
-        # grad_input.shape[-2:]) #==>1,3,148,148
-        # print('grad_input_2', grad_input.shape)
-
-        grad_input_alpha = alpha * grad_input
-        grad_input = th.fft.rfft2((1 - alpha)*grad_input)
-        grad_input = th.view_as_real(grad_input)
-        # print('grad_input_view_real', grad_input.shape)
-        grad_input = cmul(grad_input, conj(otf))
-        grad_input = th.view_as_complex(grad_input)
-        # print('grad_input_complex', grad_input.shape)
-        grad_input = th.fft.irfft2(grad_input)
-        # print('grad_input_real_final', grad_input.shape)
-        grad_input = grad_input_alpha + grad_input
-        # print('grad_input_new_new',grad_input.shape)
-
-
-
-        # print('grad_input', grad_input.shape)
+        grad_input = alpha*grad_input + th.irfft(cmul(th.rfft((1-alpha)\
+                *grad_input,2),conj(otf)),2,signal_sizes = grad_input.shape[-2:])
         
         return grad_input, None

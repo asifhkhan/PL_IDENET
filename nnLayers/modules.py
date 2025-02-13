@@ -1,12 +1,3 @@
-#!\usr\bin\env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Mar 28 23:49:14 2018
-
-@author: Stamatis Lefkimmiatis
-@email : s.lefkimmatis@skoltech.ru
-"""
-
 import torch as th
 from torch import nn
 from pydl.nnLayers import cascades
@@ -527,7 +518,7 @@ class MSELoss(nn.Module):
         super(MSELoss,self).__init__()
         
         self.grad = grad
-        self.mode = "validation"
+        self.mode = "normal"
     
     def forward(self,input,target):
         

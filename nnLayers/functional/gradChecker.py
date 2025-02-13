@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Mar  5 08:20:50 2018
-
-@author: stamatis
-@email : s.lefkimmiatis@skoltech.ru
-"""
 #import math
 import numpy as np
 import torch as th

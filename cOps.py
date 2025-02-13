@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Sun May 13 11:46:43 2018
-
-@author: Stamatis Lefkimmiatis
-@email : s.lefkimmatis@skoltech.ru
-"""
-
 import torch as th
 
 def cmul(input,other):

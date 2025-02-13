@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Apr 11 22:32:58 2018
-
-@author: Stamatis Lefkimmiatis
-@email : s.lefkimmatis@skoltech.ru
-"""
-
 import argparse
 from pydl.networks.WienerDeblurNet.net import WienerDeblurNet
 from pydl.datasets.BSDS import BSDS_deblur

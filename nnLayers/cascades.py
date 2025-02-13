@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Sun Mar 25 22:50:33 2018
-
-@author: Stamatis Lefkimmiatis
-@email : s.lefkimmatis@skoltech.ru
-"""
-
 import torch as th
 from pydl.nnLayers.functional import functional as F
 from pydl.utils import formatInput2Tuple, getPad2RetainShape

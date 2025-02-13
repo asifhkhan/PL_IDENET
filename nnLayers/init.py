@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Mar 29 17:02:19 2018
-
-@author: Stamatis Lefkimmiatis
-@email : s.lefkimmatis@skoltech.ru
-"""
 import torch as th
 from pydl import utils
 

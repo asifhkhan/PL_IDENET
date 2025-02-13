@@ -1158,17 +1158,17 @@ class WienerFilter(th.autograd.Function):
         while input.dim() < 4:
             input = input.unsqueeze(0)
 
-        batch = input.size(0) #1
-        channels = input.size(1) #3
+        batch = input.size(0)
+        channels = input.size(1)
 
         assert(blurKernel.dim() < 5),"The blurring kernel must be at most a 4D tensor."
         while blurKernel.dim() < 4:
             blurKernel = blurKernel.unsqueeze(0)
     
-        bshape = tuple(blurKernel.shape) #1, 1, 21, 21
+        bshape = tuple(blurKernel.shape)
         assert(bshape[0] in (1,batch) and bshape[1] in (1,channels)),"Invalid blurring kernel dimensions."
         
-        N = alpha.size(0) # Number of employed Wiener filters :4.
+        N = alpha.size(0) # Number of employed Wiener filters.
         assert(alpha.dim() == 2 and alpha.size(-1) in (1,channels)),\
         "Invalid dimensions for the alpha parameter. The expected shape of the "\
         +"tensor is {} x [{}|{}]".format(N,1,channels)
@@ -1178,45 +1178,53 @@ class WienerFilter(th.autograd.Function):
         +"kernel must be a 4D or 5D tensor."    
 
         if weights.dim() < 5:
-            weights = weights.unsqueeze(0) #1, 24, 1, 5, 5
+            weights = weights.unsqueeze(0)
     
-        wshape = tuple(weights.shape)#1, 24, 1, 5, 5
+        wshape = tuple(weights.shape)
         assert(wshape[0] in (1,N) and wshape[2] in (1,channels)),\
         "Invalid regularization kernel dimensions."
         
         # Zero-padding of the blur kernel to match the input size
-        B = th.zeros(bshape[0],bshape[1],input.size(2),input.size(3)).type_as(blurKernel) #1, 1, 148, 148
+        B = th.zeros(bshape[0],bshape[1],input.size(2),input.size(3)).type_as(blurKernel)
         B[...,0:bshape[2],0:bshape[3]] = blurKernel
         del blurKernel
         
         # Circular shift of the zero-padded blur kernel
-        bs = tuple(int(i) for i in -(np.asarray(bshape[-2:])//2)) #-10, -10
+        bs = tuple(int(i) for i in -(np.asarray(bshape[-2:])//2))
         bs = (0,0) + bs
-        B = utils.shift(B,bs,bc='circular') #1, 1, 148, 148
+        B = utils.shift(B,bs,bc='circular')
         
         # FFT of B
-        B = th.fft.rfft2(B) #1, 1, 148, 75
-        B = th.view_as_real(B) #1, 1, 148, 75, 2
-
+        # B = th.view_as_real(th.fft.fft(B, dim=2)) # tensor of size batch x channels x height x width x 2
+        # B = th.fft.fft(th.fft.fft(B, dim=-2), dim=-1)
+        # B = th.view_as_real(B) #1 , 1, 128, 128, 2 ==> tensor of size batch x channels x height x width x 2
+        B = th.fft.rfft2(B)
+        B = th.view_as_real(B)
+        # B = th.rfft(B,2) # tensor of size batch x channels x height x width x 2 ==>1,1,148,75,2
         # Zero-padding of the spatial dimensions of the weights to match the input size    
-        G = th.zeros(wshape[0],wshape[1],wshape[2],input.size(2),input.size(3)).type_as(weights) #1, 24, 1, 148, 148
+        G = th.zeros(wshape[0],wshape[1],wshape[2],input.size(2),input.size(3)).type_as(weights)
         G[...,0:wshape[3],0:wshape[4]] = weights
         del weights
 
         # circular shift of the zero-padded weights
-        ws = tuple(int(i) for i in -(np.asarray(wshape[-2:])//2)) #-2, -2
+        ws = tuple(int(i) for i in -(np.asarray(wshape[-2:])//2))
         ws = (0,0,0) + ws
-        G = utils.shift(G,ws,bc='circular') #1, 24, 1, 148, 148
+        G = utils.shift(G,ws,bc='circular')
         # FFT of G
+        # G = th.view_as_real(th.fft.fft(G, dim=2))  # N x D x channels x height x width x 2
+        # G = th.fft.fft(th.fft.fft(G, dim=-2), dim=-1)
+        G = th.fft.rfft2(G)
+        G = th.view_as_real(G) #4, 24, 3, 128, 128, 2 ==> N x D x channels x height x width x 2
+        # G = th.rfft(G,2) # N x D x channels x height x width x 2 ==>1,24,1,148,75,2
 
-        G = th.fft.rfft2(G) #1, 24, 1, 148, 75
-        G = th.view_as_real(G) #1, 24, 1, 148, 75, 2 ==> N x D x channels x height x width x 2
+        # Y = cmul(conj(B),th.view_as_real(th.fft.fft(input, dim=2))).unsqueeze(1) # batch x 1 x channels x height x
+        # width x 2
+        # Y = th.fft.fft(th.fft.fft(input, dim=-2), dim=-1)
+        Y = th.fft.rfft2(input)
+        Y = th.view_as_real(Y)
+        Y = cmul(conj(B), Y).unsqueeze(1) #1, 1, 3, 128, 128, 2==>batch x 1 x channels x height x width x 2
 
-
-        Y = th.fft.rfft2(input) #1, 3, 148, 75
-        Y = th.view_as_real(Y) #1, 3, 148, 75, 2
-        Y = cmul(conj(B), Y).unsqueeze(1) #1, 1, 3, 148, 75, 2==>batch x 1 x channels x height x width x 2
-
+        # Y = cmul(conj(B),th.rfft(input,2)).unsqueeze(1) # batch x 1 x channels x height x width x 2 ==>1,1,3,148,75,2
         
         ctx.intermediate_results = tuple()
         if ctx.needs_input_grad[2] or ctx.needs_input_grad[3]:
@@ -1224,27 +1232,33 @@ class WienerFilter(th.autograd.Function):
         elif ctx.needs_input_grad[0]:
             ctx.intermediate_results += (alpha,B,G)
         
-        B = cabs(B).unsqueeze(-1) #1,,1,148,75,1 # batch x channels x height x width x 1
-        G = cabs(G).pow(2).sum(dim=1) #1,1,148,75 # N x channels x height x width
-        G = G.mul(alpha.unsqueeze(-1).unsqueeze(-1)).unsqueeze(0).unsqueeze(-1) #1, 4, 1, 148, 75, 1# 1 x N x channels x height x width x 1
+        B = cabs(B).unsqueeze(-1) # batch x channels x height x width x 1
+        G = cabs(G).pow(2).sum(dim=1) # N x channels x height x width
+        G = G.mul(alpha.unsqueeze(-1).unsqueeze(-1)).unsqueeze(0).unsqueeze(-1) # 1 x N x channels x height x width x 1
         #b1= B.pow(2).unsqueeze(1)
-        G = G + B.pow(2).unsqueeze(1) #1, 4, 1, 148, 75, 1 # batch x N x channels x height x width x 1
-        S = (B.unsqueeze(1).div(G)).pow(2).squeeze(-1) #1, 4, 1, 148, 75
+        G = G + B.pow(2).unsqueeze(1) # batch x N x channels x height x width x 1
+        S = (B.unsqueeze(1).div(G)).pow(2).squeeze(-1)
         # Sinc S is one-sided Fourier Transform we need to compute the sum of 
         # the Fourier coefficients taking into account the symmetry.
-        c = 2*S.sum(dim=-1).sum(dim=-1)-S[...,0].sum(dim=-1) #1, 4, 1
+        c = 2*S.sum(dim=-1).sum(dim=-1)-S[...,0].sum(dim=-1)
         if not input.size(-1)%2:
             c -= S[...,-1].sum(dim=-1)
-        c = c/(input.size(-1)*input.size(-2)) #1, 4, 1
+        c = c/(input.size(-1)*input.size(-2))
 
 
-
-        Y_div_G = Y.div(G) #1, 4, 3, 148, 75, 2
-        Y_div_G = th.view_as_complex(Y_div_G)  #1, 4, 3, 148, 75
-        inverse_fft = th.fft.irfft2(Y_div_G) #1, 4, 3, 148, 148
-
+        # return th.fft.irfft(th.view_as_complex(Y.div(G)),n= input.shape[-2:]), c
+        Y_div_G = Y.div(G)
+        Y_div_G = th.view_as_complex(Y_div_G)
+        inverse_fft = th.fft.irfft2(Y_div_G)
+        # inverse_fft = th.fft.ifft(th.fft.ifft(Y_div_G, dim=-2), dim=-1).real #1, 4, 3, 128, 128 == > batch x N x channels x height x width
+        # return th.irfft(Y.div(G),2,signal_sizes = input.shape[-2:]), c
         return inverse_fft, c
+        # output 1: batch x N x channels x height x width
+        # output 2: batch x N x channels
 
+        # Note: If sigma (of size batch) is the noise std of the input image,
+        # then the noise std of the output images will be equal to
+        # th.sqrt(sigma.unsqueeze(-1).pow(2).mul(c.mean(dim=2)))
 
     @staticmethod
     def backward(ctx,grad_output,grad_c = None):                

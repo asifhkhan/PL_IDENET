@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Sun Mar 25 22:50:33 2018
-
-@author: Stamatis Lefkimmiatis
-@email : s.lefkimmiatis@skoltech.ru
-"""
 import torch as th
 import numpy as np
 from scipy.fftpack import dct, dctn
@@ -856,7 +848,6 @@ def shift(x,s,bc='circular'):
     bc: String with the prefered boundary conditions (bc='circular'|'reflexive'|'zero')
         (Default: 'circular')
     """
-    
     if not isinstance(bc, str):
         raise Exception("bc must be of type string")
        
@@ -889,7 +880,7 @@ def shift(x,s,bc='circular'):
             else:
                 m = x.shape[i]
                 idx = indices[:]                
-                idx[i] = (np.arange(0,m)-s[i])%m
+                idx[i] = list((np.arange(0,m)-s[i])%m)
                 xs = xs[tuple(idx)]
     elif bc == 'reflexive':
         xs = x.clone() # make a copy of x
@@ -974,7 +965,7 @@ def shift_transpose(x,s,bc='circular'):
             else:
                 m = x.shape[i]
                 idx = indices[:]                
-                idx[i] = (np.arange(0,m)+s[i])%m
+                idx[i] = list((np.arange(0,m)+s[i])%m)
                 xs = xs[tuple(idx)]
     elif bc == 'reflexive':
         y=x.clone()
@@ -1332,7 +1323,8 @@ def odctdict(n,L,dtype = 'f',GPU = False):
     
     D[:,0] = 1/math.sqrt(n)
     for k in range(1,L): 
-        v = th.cos(th.arange(0,n)*math.pi*k/L); 
+        o = th.arange(0,n)*math.pi*k/L
+        v = th.cos(o.float()); 
         v -= v.mean();
         D[:,k] = v.div(v.norm(p=2))
     
@@ -2191,8 +2183,10 @@ def psf2otf(psf,otfSize):
     
     s = tuple(int(i) for i in -(np.asarray(psf.shape[0:])//2))
     s = (0,)*(len(otfSize)-2)+s
-    otf = shift(otf,s,bc='circular')
-    otf = th.rfft(otf,2)
+    otf = shift(otf,s,bc='circular') ##1,3,148,148
+    otf =th.fft.rfft2(otf)
+    otf = th.view_as_real(otf)
+    # otf = th.rfft(otf,2) ##1,3,148,75,2
     
     return otf
 
