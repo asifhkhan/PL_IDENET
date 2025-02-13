@@ -1,0 +1,59 @@
+name: PL_IDENetx4_setting1
+suffix: ~  # add suffix to saved images
+model: blind_asif
+distortion: sr
+scale: 4
+ensemble: False
+crop_border: ~  # crop border when evaluation. If None(~), crop the scale pixels
+gpu_ids: [0]
+pca_matrix_path: /../../pca_matrix.pth
+
+datasets:
+#  test1:
+#    name: div2k
+#    mode: LQGT
+#    dataroot_GT: /home/asif/Documents/kernel_est/DAN/DAN_master/codes/config/DANv1/dataset/div2k/x4HR.lmdb
+#    dataroot_LQ: /home/asif/Documents/kernel_est/DAN/DAN_master/codes/config/DANv1/dataset/div2k/x4LR.lmdb
+#  test2:
+#    name: lsdir
+#    mode: LQGT
+#    dataroot_GT: /home/asif/Documents/kernel_est/DAN/DAN_master/codes/config/DANv1/dataset/lsdir/x4HR.lmdb
+#    dataroot_LQ: /home/asif/Documents/kernel_est/DAN/DAN_master/codes/config/DANv1/dataset/lsdir/x4LR.lmdb
+
+  test1:
+    name: Set5
+    mode: LQGT
+    dataroot_GT: ./iso/x4/Set5/x4HRblur.lmdb
+    dataroot_LQ: ./iso/x4/Set5/x4LRblur.lmdb
+  test2:
+    name: Set14
+    mode: LQGT
+    dataroot_GT: ./iso/x4/Set14/x4HRblur.lmdb
+    dataroot_LQ: ./iso/x4/Set14/x4LRblur.lmdb
+  test3:
+    name: BSDS100
+    mode: LQGT
+    dataroot_GT: ./iso/x4/BSDS100/x4HRblur.lmdb
+    dataroot_LQ: ./iso/x4/BSDS100/x4LRblur.lmdb
+  test4:
+    name: urban100
+    mode: LQGT
+    dataroot_GT: ./iso/x4/urban100/x4HRblur.lmdb
+    dataroot_LQ: ./iso/x4/urban100/x4LRblur.lmdb
+  test5:
+    name: manga109
+    mode: LQGT
+    dataroot_GT: ./iso/x4/manga109/x4HRblur.lmdb
+    dataroot_LQ: ./iso/x4/manga109/x4LRblur.lmdb
+
+#### network structures
+network_G:
+  which_model_G: DEblurSRResDNet
+  setting:
+    scale: 4
+#    scale: 4
+
+#### path
+path:
+  pretrain_model_G: ./checkpoints/1780_G_best_psnr.pth
+
